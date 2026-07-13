@@ -30,6 +30,32 @@ const { TOOLS, runTool } = require("./tools");
 const app = express();
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+// ─── Demo auth (HTTP Basic) — protects the dashboard, not Twilio ───
+// Skips: Twilio webhook (Twilio can't send Basic Auth headers), audio media
+// fetch (Twilio downloads MP3s), and /health (monitoring). Everything else
+// (dashboard, /api/*) requires DEMO_PASSWORD if set. If unset → open.
+function demoAuth(req, res, next) {
+  const pw = process.env.DEMO_PASSWORD;
+  if (!pw) return next();
+  const openExact = new Set(["/health", "/webhook/whatsapp"]);
+  if (openExact.has(req.path)) return next();
+  if (req.path.startsWith("/audio/")) return next();
+
+  const header = req.headers.authorization || "";
+  if (header.startsWith("Basic ")) {
+    try {
+      const decoded = Buffer.from(header.slice(6), "base64").toString("utf-8");
+      const colonIdx = decoded.indexOf(":");
+      const provided = colonIdx >= 0 ? decoded.slice(colonIdx + 1) : "";
+      if (provided === pw) return next();
+    } catch (_) {}
+  }
+  res.set("WWW-Authenticate", 'Basic realm="voxtr-rad demo"');
+  return res.status(401).send("Auth required");
+}
+app.use(demoAuth);
+
 app.use(express.static(path.join(__dirname, "..", "public")));
 
 // ─── Twilio + Anthropic clients ───
