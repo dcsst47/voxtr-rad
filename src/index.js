@@ -42,7 +42,17 @@ const VOXTR_NUMBER = RAW_VOXTR.startsWith("whatsapp:") ? RAW_VOXTR : `whatsapp:$
 // ─── Public URL for serving audio back to Twilio (must be reachable from Twilio) ───
 // Twilio downloads media from mediaUrl on the outbound MessageResource, so this MUST match
 // the URL the app is deployed under. Set BASE_URL to the Railway/ngrok host.
-const BASE_URL = (process.env.BASE_URL || "").replace(/\/$/, "");
+// Normalize: strip whitespace, strip ALL trailing slashes, upgrade http→https, refuse placeholder.
+const BASE_URL = (() => {
+  let u = (process.env.BASE_URL || "").trim().replace(/\/+$/, "");
+  if (u.startsWith("http://")) u = "https://" + u.slice(7);
+  if (u.includes("xxxx") || u === "") {
+    console.error(`❌ BASE_URL is placeholder or empty: "${u}" — voice replies will fail. Set BASE_URL to your Railway domain (https://web-production-02d9c.up.railway.app).`);
+    return "";
+  }
+  return u;
+})();
+console.log(`🌐 BASE_URL = "${BASE_URL}"`);
 
 // ─── In-memory per-user conversation history (last 20 turns) ───
 // Simple map keyed by from-number. Loss on restart is fine for a demo; swap to Redis/DB later.
@@ -113,12 +123,13 @@ async function sendReply(to, text, language, wantVoice) {
     const id = `vn_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     storeAudio(id, audio);
     const audioUrl = `${BASE_URL}/audio/${id}`;
+    console.log(`🔊 Attempting voice reply to ${to}: ${audioUrl} (lang=${language})`);
     await twilioClient.messages.create({
       from: VOXTR_NUMBER,
       to: normalizeWhatsApp(to),
       mediaUrl: [audioUrl],
     });
-    console.log(`🔊 Voice reply sent to ${to}: ${audioUrl} (lang=${language})`);
+    console.log(`✅ Voice reply queued to ${to}`);
   } catch (err) {
     if (err.code === "TTS_LANG_UNSUPPORTED") {
       console.warn(`⚠️ TTS skipped: ${err.message}`);
