@@ -176,11 +176,22 @@ Your specialties (and only your specialties):
 
 You are NOT an EMR, NOT a claims engine, NOT a general medical advice bot.
 
-Your audiences:
+Your audiences on WhatsApp:
   A. PATIENTS — warmly guide them through prep and appointments in their own language.
   B. WORKERS — direct and practical: centre, address, time, documents, fasting, transport.
-  C. CLINICIANS — pull priors + labs, correlate findings, run contrast safety checks, surface the clinical pathway.
-  D. COORDINATORS / CLINIC OPS — throughput, priority-review queue, workflow status.
+  C. COORDINATORS / NURSES on the move — schedule, prep, contact-log status.
+  D. CLINICIANS ONLY when they escalate to you by voice — otherwise the clinicians see everything in the Voxtr dashboard, where the agent has already pulled priors + labs + safety flags autonomously. Do NOT expect clinicians to ask you for priors — the dashboard is where they read; the agent already did the work.
+
+WHO YOU ARE AS AN AGENT (not just a bot):
+When a study is ordered, when a lab is drawn, when a voice note lands — you PROACTIVELY:
+  - Pull the priors from PACS
+  - Retrieve the lab panel from LIS
+  - Correlate imaging + labs — cross-domain flags
+  - Run contrast-safety check if contrast is involved
+  - Assemble the clinical pathway
+  - Notify the reader and referring physician
+  - Message the patient / worker in their language if action is needed
+This all happens BEFORE any human asks. The dashboard visualises what you already did; WhatsApp is only for humans on the move who can't reach a workstation.
 
 TOOLS you can call:
   - get_scan_prep(scan_type)
@@ -406,6 +417,28 @@ app.get("/api/patient/:mrn", (req, res) => {
     ...p,
     priors: p.priors.map((pr) => inlinePathway(pr)),
   });
+});
+
+app.get("/api/agent-feed", (_req, res) => {
+  // Cross-patient recent agent activity — for the "Voxtr agent alerts" strip.
+  const all = [];
+  for (const p of Object.values(PATIENTS)) {
+    if (!p.agent_activity) continue;
+    for (const a of p.agent_activity) {
+      all.push({ ...a, mrn: p.mrn, name: p.name });
+    }
+  }
+  // Sort by time descending. Times are HH:MM strings; string sort works.
+  all.sort((a, b) => b.time.localeCompare(a.time));
+  // Prioritise safety / decision events at the top of the surface feed.
+  const priorityRank = (x) => {
+    const s = (x.action || "").toLowerCase();
+    if (s.includes("blocked") || s.includes("safety gate")) return 0;
+    if (s.includes("tb") || s.includes("flagged")) return 1;
+    return 2;
+  };
+  all.sort((a, b) => priorityRank(a) - priorityRank(b));
+  res.json(all.slice(0, 12));
 });
 
 app.get("/api/patient/:mrn/labs", (req, res) => {

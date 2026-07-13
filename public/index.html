@@ -332,6 +332,72 @@
   .mmix-fill { background: linear-gradient(90deg, var(--accent-dim), var(--accent)); height: 100%; }
   .mmix .count { font-family: 'SF Mono', Menlo, monospace; text-align: right; color: var(--dim); }
 
+  /* Agent activity */
+  .agent-panel {
+    padding: 14px 16px;
+    background: linear-gradient(135deg, rgba(0, 217, 200, 0.05) 0%, rgba(96, 165, 250, 0.03) 100%);
+    border: 1px solid rgba(0, 217, 200, 0.30);
+    border-radius: 10px;
+    margin-top: 12px;
+  }
+  .agent-panel .head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+  }
+  .agent-panel .head .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 10px; letter-spacing: 1.2px; color: var(--accent);
+    text-transform: uppercase; font-weight: 800;
+  }
+  .agent-panel .head .badge::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 10px var(--accent);
+    animation: pulse 2s infinite;
+  }
+  .agent-panel .subhead { font-size: 11px; color: var(--muted); margin-left: auto; }
+  .agent-item {
+    display: grid; grid-template-columns: 46px 78px 1fr;
+    gap: 10px; align-items: baseline;
+    padding: 6px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    font-size: 12px;
+  }
+  .agent-item:last-child { border-bottom: none; }
+  .agent-item .time { font-family: 'SF Mono', Menlo, Consolas, monospace; color: var(--muted); font-size: 11px; }
+  .agent-item .src {
+    font-size: 9px; letter-spacing: 0.8px;
+    padding: 2px 6px; border-radius: 3px; text-align: center;
+    text-transform: uppercase; font-weight: 700;
+  }
+  .agent-item .src.PACS { background: rgba(0, 217, 200, 0.15); color: var(--accent); }
+  .agent-item .src.LIS { background: rgba(96, 165, 250, 0.15); color: var(--info); }
+  .agent-item .src.WhatsApp { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+  .agent-item .src.Portal { background: rgba(167, 139, 250, 0.15); color: #c4b5fd; }
+  .agent-item .src.AI, .agent-item .src.AIdecision { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+  .agent-item .src.Order, .agent-item .src.Orderentry { background: rgba(148, 163, 184, 0.15); color: var(--dim); }
+  .agent-item .src.MoH { background: rgba(239, 68, 68, 0.12); color: #fca5a5; }
+  .agent-item .action { color: #dbe5f2; line-height: 1.4; }
+  .agent-item .action.safety { color: #fca5a5; font-weight: 600; }
+
+  /* Agent alerts strip */
+  .alert-strip {
+    display: flex; gap: 10px; overflow-x: auto;
+    padding: 12px 0; margin-bottom: 16px;
+  }
+  .alert-card {
+    flex: 0 0 auto; min-width: 340px;
+    padding: 10px 14px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--accent);
+    border-radius: 8px;
+    font-size: 12px;
+  }
+  .alert-card.safety { border-left-color: var(--danger); }
+  .alert-card.tb { border-left-color: var(--warning); }
+  .alert-card .top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .alert-card .top .time { font-family: 'SF Mono', Menlo, monospace; color: var(--muted); font-size: 10px; }
+  .alert-card .patient { font-weight: 600; color: var(--text); }
+  .alert-card .body { color: #dbe5f2; margin-top: 4px; line-height: 1.4; }
+
   /* Loading */
   .loading { padding: 60px; text-align: center; color: var(--muted); }
 
@@ -727,12 +793,18 @@ async function renderRadiologist() {
 
   grid.appendChild(studyCard);
 
-  // Right column: labs + priors + pathway
+  // Right column: agent activity + labs + priors + pathway
   const rightCol = el('div', { class: 'card' });
+
+  // Agent activity — what the AI did BEFORE the radiologist opened this study
+  if (patient.agent_activity) {
+    rightCol.appendChild(el('h3', {}, 'Voxtr Agent Activity · pre-read'));
+    rightCol.appendChild(renderAgentPanel(patient.agent_activity, 'AI actions completed'));
+  }
 
   // Labs
   if (patient.labs && patient.labs.results) {
-    rightCol.appendChild(el('h3', {}, `Recent labs · ${fmtDate(patient.labs.panel_date)}`));
+    rightCol.appendChild(el('h3', { style: 'margin-top: 16px;' }, `Recent labs · ${fmtDate(patient.labs.panel_date)}`));
     rightCol.appendChild(renderLabPanel(patient.labs.results));
   }
 
@@ -831,6 +903,25 @@ function renderPathway(pathway) {
   return container;
 }
 
+function renderAgentPanel(activity, title = 'Voxtr Agent Activity') {
+  if (!activity || !activity.length) return null;
+  const panel = el('div', { class: 'agent-panel' });
+  panel.appendChild(el('div', { class: 'head' },
+    el('div', { class: 'badge' }, title),
+    el('div', { class: 'subhead' }, `Autonomous · ${activity.length} actions before you opened the record`)
+  ));
+  activity.forEach((a) => {
+    const srcClass = (a.source || '').replace(/\s+/g, '').replace('AIdecision', 'AI');
+    const isSafety = /block|safety gate|contraindication/i.test(a.action || '');
+    panel.appendChild(el('div', { class: 'agent-item' },
+      el('div', { class: 'time' }, a.time || ''),
+      el('div', { class: 'src ' + srcClass }, (a.source || '').split(' ')[0]),
+      el('div', { class: 'action' + (isSafety ? ' safety' : '') }, a.action || '')
+    ));
+  });
+  return panel;
+}
+
 function renderContrastAlert(safety) {
   const div = el('div', { class: 'alert-contrast' });
   div.appendChild(el('div', { class: 'head' }, 'Contrast contraindication'));
@@ -852,7 +943,10 @@ async function renderPhysician() {
   const main = $('#main');
   main.innerHTML = '<div class="loading">Loading…</div>';
 
-  const patients = await api('/api/patients');
+  const [patients, feed] = await Promise.all([
+    api('/api/patients'),
+    api('/api/agent-feed').catch(() => []),
+  ]);
   if (!state.selectedMrn) state.selectedMrn = patients[0].mrn;
   const patient = await api('/api/patient/' + state.selectedMrn);
   const safety = await api('/api/patient/' + state.selectedMrn + '/contrast-safety').catch(() => null);
@@ -861,10 +955,34 @@ async function renderPhysician() {
   main.appendChild(el('div', { class: 'section-head' },
     el('div', {},
       el('h1', {}, 'Patient Record'),
-      el('p', {}, 'Full imaging + laboratory picture, notes, meds, and active clinical pathway.')
+      el('p', {}, 'Voxtr agent has already pulled priors, correlated labs, and flagged safety issues before you opened the record.')
     ),
     el('div', { class: 'subtle' }, `Signed in as `, el('b', {}, 'Dr. Al Marzooqi · Referring physician'))
   ));
+
+  // Top strip: recent autonomous alerts across ALL patients — the "Voxtr agent has been busy" moment
+  if (feed && feed.length) {
+    main.appendChild(el('h3', { style: 'margin-bottom: 4px; color: var(--muted); font-size: 11px; letter-spacing: 1.2px;' },
+      'VOXTR AGENT · RECENT AUTONOMOUS ACTIONS (ACROSS ALL YOUR PATIENTS)'));
+    const strip = el('div', { class: 'alert-strip' });
+    feed.forEach((a) => {
+      const isSafety = /block|safety gate|contraindication/i.test(a.action || '');
+      const isTB = /tb|reticulonodular|flagged/i.test(a.action || '');
+      const klass = isSafety ? 'safety' : (isTB ? 'tb' : '');
+      strip.appendChild(el('div', {
+        class: 'alert-card ' + klass,
+        onclick: () => { state.selectedMrn = a.mrn; renderPhysician(); },
+        style: 'cursor: pointer;',
+      },
+        el('div', { class: 'top' },
+          el('div', { class: 'patient' }, `${a.name} · ${a.mrn}`),
+          el('div', { class: 'time' }, `${a.time} · ${a.source}`)
+        ),
+        el('div', { class: 'body' }, a.action)
+      ));
+    });
+    main.appendChild(strip);
+  }
 
   // Patient chip row
   const chipRow = el('div', { class: 'card', style: 'margin-bottom: 16px; padding: 12px 16px;' });
@@ -924,9 +1042,18 @@ async function renderPhysician() {
 
   grid.appendChild(left);
 
-  // Right: labs + pathway + contrast alert
+  // Right: agent activity FIRST, then correlated view, labs, pathway
   const right = el('div', { class: 'card' });
-  right.appendChild(el('h3', {}, 'Correlated view — imaging + labs'));
+
+  // What the AI did before you opened this record
+  if (patient.agent_activity) {
+    right.appendChild(el('h3', {}, 'Voxtr Agent Activity · this patient'));
+    right.appendChild(renderAgentPanel(patient.agent_activity, 'AI actions completed'));
+    right.appendChild(el('div', { class: 'subtle', style: 'font-size: 11px; margin-top: 6px; font-style: italic;' },
+      'All actions above ran autonomously. You did not have to ask.'));
+  }
+
+  right.appendChild(el('h3', { style: 'margin-top: 16px;' }, 'Correlated view — imaging + labs'));
   const latest = patient.priors[patient.priors.length - 1];
   right.appendChild(el('h2', {}, latest.finding));
 

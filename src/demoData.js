@@ -247,6 +247,15 @@ const PATIENTS = {
     name: "Ahmed Al Blooshi",
     dob: "1978-06-14",
     sex: "M",
+    agent_activity: [
+      { time: "07:52", source: "PACS", action: "Pulled prior imaging on right knee (2 studies over 2 years)" },
+      { time: "07:52", source: "LIS", action: "Retrieved most recent lab panel (2026-07-10)" },
+      { time: "07:53", source: "AI decision", action: "Flagged HbA1c 6.8 (HIGH) alongside MSK finding — cross-domain metabolic context" },
+      { time: "07:53", source: "AI decision", action: "Correlated meniscal tear with existing medial-compartment degenerative changes (Jan 2024)" },
+      { time: "07:53", source: "AI decision", action: "Assembled conservative pathway per prior Rashid orthopaedic recommendation" },
+      { time: "07:54", source: "Portal", action: "Surfaced medication note: metformin — flag for any future contrast study" },
+      { time: "07:54", source: "Portal", action: "Notified Dr. Rashid — record ready for review" },
+    ],
     priors: [
       {
         date: "2024-01-12",
@@ -292,6 +301,14 @@ const PATIENTS = {
     name: "Fatima Al Hosani",
     dob: "1995-11-22",
     sex: "F",
+    agent_activity: [
+      { time: "09:12", source: "WhatsApp", action: "Received voice note (EN) — patient asked about ultrasound prep" },
+      { time: "09:12", source: "AI decision", action: "Identified scan type: lower abdomen obstetric — full-bladder protocol required" },
+      { time: "09:13", source: "WhatsApp", action: "Voice + text reply sent to patient with prep instructions" },
+      { time: "09:13", source: "LIS", action: "Retrieved most recent pregnancy panel (2025-11-04)" },
+      { time: "09:13", source: "AI decision", action: "Flagged mild anaemia (Hb 11.4) — iron supplementation on record, no additional action" },
+      { time: "09:14", source: "Portal", action: "Antenatal schedule auto-populated for Dr. Al Marzooqi's queue" },
+    ],
     priors: [
       {
         date: "2025-11-04",
@@ -327,6 +344,18 @@ const PATIENTS = {
     name: "Rafiq Khan",
     dob: "1990-03-18",
     sex: "M",
+    agent_activity: [
+      { time: "13:04", source: "WhatsApp", action: "Voice note (UR) — worker asked for medical centre location" },
+      { time: "13:04", source: "AI decision", action: "Matched to visa-medical workflow · Al Qusais centre" },
+      { time: "13:05", source: "WhatsApp", action: "Reply sent in Urdu — address, documents, fasting, transport" },
+      { time: "13:47", source: "PACS", action: "CXR ingested from Al Qusais centre — routed for AI triage" },
+      { time: "13:47", source: "AI decision", action: "AI classification: NORMAL (confidence 0.98)" },
+      { time: "13:47", source: "LIS", action: "Retrieved same-visit blood panel — all values within range" },
+      { time: "13:48", source: "AI decision", action: "Correlated CXR + labs — no cross-domain concern" },
+      { time: "13:48", source: "Portal", action: "Report auto-drafted · reader confirmed in 42 seconds" },
+      { time: "13:49", source: "WhatsApp", action: "Voice + text sent (UR) to worker — cleared, next steps for EID" },
+      { time: "13:49", source: "Portal", action: "Report released to MoH submission queue" },
+    ],
     priors: [
       {
         date: "2026-07-13",
@@ -360,6 +389,14 @@ const PATIENTS = {
     name: "Divya Menon",
     dob: "1984-09-11",
     sex: "F",
+    agent_activity: [
+      { time: "10:32", source: "PACS", action: "US upper abdomen ingested — routed to abdominal sub-specialty queue" },
+      { time: "10:33", source: "AI decision", action: "AI-flagged: hepatic steatosis pattern (moderate) — flagged for review" },
+      { time: "10:33", source: "LIS", action: "Pulled same-week LFT + metabolic panel" },
+      { time: "10:34", source: "AI decision", action: "Cross-domain flag: ALT 68 + HbA1c 6.1 → NAFLD + prediabetes correlation" },
+      { time: "10:35", source: "Portal", action: "Endocrinology + dietician referrals auto-queued for Dr. Thomas' sign-off" },
+      { time: "10:36", source: "WhatsApp", action: "Voice note (ML) sent to patient with follow-up plan explanation" },
+    ],
     priors: [
       {
         date: "2026-06-28",
@@ -395,6 +432,21 @@ const PATIENTS = {
     name: "Mohammed Al Shamsi",
     dob: "1964-11-04",
     sex: "M",
+    agent_activity: [
+      { time: "08:14", source: "Order entry", action: "Radiology order received: CT chest with IV contrast (RUL nodule characterisation)" },
+      { time: "08:14", source: "PACS", action: "Retrieved 6 months of imaging — prior CXR from Dec 2025 flagged the nodule" },
+      { time: "08:14", source: "LIS", action: "Pulled most recent metabolic panel + renal function (2026-07-13)" },
+      { time: "08:15", source: "AI decision", action: "SAFETY GATE TRIGGERED — Creatinine 2.4 · eGFR 32 (CKD 3b)" },
+      { time: "08:15", source: "AI decision", action: "IODINATED CONTRAST BLOCKED per KDIGO / ACR guidance" },
+      { time: "08:15", source: "AI decision", action: "Medication list scanned — metformin, ramipril, empagliflozin (contrast + metformin flag)" },
+      { time: "08:16", source: "AI decision", action: "Drafted alternatives: non-contrast CT · MRI + gadobutrol · pre-hydration protocol" },
+      { time: "08:16", source: "Portal", action: "Alert pushed to Dr. K. Menon (radiology) — awaiting confirmation" },
+      { time: "08:16", source: "Portal", action: "Alert pushed to Dr. Al Rashidi (referring) — awaiting confirmation" },
+      { time: "08:17", source: "WhatsApp", action: "Voice note (AR) sent to patient — non-contrast alternative explained" },
+      { time: "08:18", source: "Portal", action: "Non-contrast CT auto-booked into same 16:15 slot" },
+      { time: "08:19", source: "Portal", action: "Nephrology consult requested — 7-day window · sent to Dr. Al Blooshi" },
+      { time: "08:19", source: "AI decision", action: "Metformin hold instruction sent to patient (pre-scan reminder queued for 15:00)" },
+    ],
     priors: [
       {
         date: "2025-12-19",
@@ -444,6 +496,13 @@ const PATIENTS = {
     name: "Yousef Nasser",
     dob: "1974-02-08",
     sex: "M",
+    agent_activity: [
+      { time: "11:20", source: "PACS", action: "MRI lumbar ingested — routed to spine sub-specialty queue" },
+      { time: "11:21", source: "AI decision", action: "AI-flagged L4-L5 posterior disc bulge · mild stenosis · no impingement" },
+      { time: "11:21", source: "LIS", action: "Retrieved recent inflammatory markers — ESR 18, CRP 3.2 (normal, no infective concern)" },
+      { time: "11:22", source: "AI decision", action: "Assembled conservative pathway: physio + NSAID + 6-week neurosurg review" },
+      { time: "11:22", source: "Portal", action: "Report drafted · reader queued" },
+    ],
     priors: [
       {
         date: "2026-05-22",
@@ -479,6 +538,18 @@ const PATIENTS = {
     name: "Hassan Al Nuaimi",
     dob: "1998-08-30",
     sex: "M",
+    agent_activity: [
+      { time: "14:02", source: "PACS", action: "Visa-medical CXR ingested from Al Qusais centre" },
+      { time: "14:02", source: "AI decision", action: "AI-FLAGGED: reticulonodular pattern R upper lobe with volume loss — TB CONCERN" },
+      { time: "14:03", source: "LIS", action: "Retrieved same-visit blood panel (2026-07-14)" },
+      { time: "14:03", source: "AI decision", action: "CROSS-DOMAIN CORRELATION: WBC 12.4 (H), ESR 62 (H), CRP 88 (H)" },
+      { time: "14:03", source: "AI decision", action: "Priority-flag confirmed by two independent signals (imaging + inflammation)" },
+      { time: "14:04", source: "Portal", action: "Alert pushed to Dr. K. Menon — awaiting confirmation" },
+      { time: "14:04", source: "Portal", action: "GeneXpert MTB/RIF PCR + AFB smear × 3 orders queued" },
+      { time: "14:04", source: "Portal", action: "HRCT chest booked · pulmonology consult requested" },
+      { time: "14:05", source: "WhatsApp", action: "Voice note (UR) sent to worker — TB workup explanation" },
+      { time: "14:05", source: "MoH", action: "Visa provisionally held pending confirmatory results" },
+    ],
     priors: [
       {
         date: "2026-07-14",
@@ -513,6 +584,15 @@ const PATIENTS = {
     name: "Ines Da Silva",
     dob: "1958-04-19",
     sex: "F",
+    agent_activity: [
+      { time: "09:40", source: "PACS", action: "DEXA scan ingested — lumbar spine + hip" },
+      { time: "09:41", source: "AI decision", action: "T-score -3.1 · Z-score -2.4 — osteoporosis, high fracture risk" },
+      { time: "09:41", source: "LIS", action: "Retrieved Vit D + calcium + TSH panel" },
+      { time: "09:42", source: "AI decision", action: "Cross-domain flag: Vit D 14 (DEFICIENT) — repletion protocol required" },
+      { time: "09:42", source: "AI decision", action: "FRAX calculated: 22% major, 11% hip — treatment threshold met" },
+      { time: "09:43", source: "Portal", action: "Bisphosphonate + Vit D repletion prescription queued for Dr. Bakri" },
+      { time: "09:43", source: "Portal", action: "Fall-prevention counselling booked" },
+    ],
     priors: [
       {
         date: "2026-06-10",
