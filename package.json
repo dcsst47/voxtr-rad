@@ -1,0 +1,22 @@
+{
+  "name": "voxtr-rad",
+  "version": "0.1.0",
+  "description": "Voxtr Rad — WhatsApp AI for Boom Health / radiology + workforce health demos",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.104.1",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "twilio": "^5.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
