@@ -1,0 +1,859 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Voxtr Rad — Clinical Operating Layer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #0a0e1a;
+    --bg-2: #0f1526;
+    --card: #131a2e;
+    --card-2: #182140;
+    --border: #23305a;
+    --text: #e6ecf5;
+    --muted: #7a8ba7;
+    --accent: #00d9c8;
+    --accent-dim: #009d90;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --money: #a78bfa;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", Roboto, sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+  a { color: var(--accent); }
+  button { font-family: inherit; }
+
+  /* ─── Top bar ─── */
+  .topbar {
+    display: flex;
+    align-items: center;
+    gap: 24px;
+    padding: 14px 24px;
+    background: linear-gradient(180deg, #0d1424 0%, #0a0e1a 100%);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 40px; height: 40px;
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-dim) 100%);
+    color: #041418; font-weight: 900; font-size: 22px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 8px;
+    box-shadow: 0 0 20px rgba(0, 217, 200, 0.35);
+  }
+  .brand-name { font-weight: 800; font-size: 15px; letter-spacing: 1.5px; }
+  .brand-tag { font-size: 11px; color: var(--muted); letter-spacing: 0.5px; }
+
+  .role-tabs { display: flex; gap: 4px; margin-left: 24px; }
+  .role-tabs button {
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--muted);
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    transition: all 0.15s ease;
+  }
+  .role-tabs button:hover { color: var(--text); background: var(--card); }
+  .role-tabs button.active {
+    background: var(--card-2);
+    color: var(--accent);
+    border-color: var(--border);
+  }
+
+  .live { margin-left: auto; display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); letter-spacing: 0.8px; }
+  .pulse {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--success);
+    box-shadow: 0 0 12px var(--success);
+    animation: pulse 2s ease infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(0.85); }
+  }
+
+  /* ─── Layout ─── */
+  main { padding: 24px; max-width: 1600px; margin: 0 auto; }
+  .grid { display: grid; gap: 16px; }
+  .grid-3 { grid-template-columns: 340px 1fr 400px; }
+  .grid-2 { grid-template-columns: 1fr 1fr; }
+  .grid-4-stats { grid-template-columns: repeat(4, 1fr); }
+  @media (max-width: 1100px) {
+    .grid-3 { grid-template-columns: 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .grid-4-stats { grid-template-columns: repeat(2, 1fr); }
+  }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .card h3 {
+    font-size: 11px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 0 0 14px 0;
+    font-weight: 700;
+  }
+  .card h2 {
+    font-size: 18px; font-weight: 700; margin: 0 0 6px 0;
+  }
+  .subtle { color: var(--muted); font-size: 12px; }
+
+  /* ─── Stat cards ─── */
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .stat-label {
+    font-size: 10px;
+    letter-spacing: 1.2px;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 700;
+  }
+  .stat-value {
+    font-size: 34px;
+    font-weight: 800;
+    margin-top: 8px;
+    line-height: 1;
+    background: linear-gradient(135deg, var(--text) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .stat-sub { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  .stat.money .stat-value {
+    background: linear-gradient(135deg, var(--money) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /* ─── Worklist ─── */
+  .worklist { display: flex; flex-direction: column; gap: 8px; max-height: 720px; overflow-y: auto; }
+  .worklist-item {
+    padding: 12px 14px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    background: var(--card-2);
+  }
+  .worklist-item:hover { border-color: var(--accent-dim); transform: translateX(2px); }
+  .worklist-item.active { border-color: var(--accent); background: rgba(0, 217, 200, 0.08); }
+  .worklist-item .name { font-weight: 600; font-size: 14px; }
+  .worklist-item .meta { font-size: 11px; color: var(--muted); margin-top: 4px; display: flex; gap: 8px; align-items: center; }
+  .pill {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 10px;
+    font-weight: 600;
+    background: var(--card);
+    color: var(--muted);
+  }
+  .pill.urgent { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+  .pill.stat-flag { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+  .pill.ok { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+  .pill.ai { background: rgba(0, 217, 200, 0.12); color: var(--accent); }
+
+  /* ─── Image placeholder ─── */
+  .imgbox {
+    aspect-ratio: 4 / 3;
+    background:
+      radial-gradient(ellipse at center, #1e2a4a 0%, #0a0e1a 70%),
+      #0a0e1a;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--muted); font-size: 11px; letter-spacing: 1.2px;
+    position: relative;
+    overflow: hidden;
+  }
+  .imgbox::before {
+    content: '';
+    position: absolute; inset: 20% 30%;
+    background: radial-gradient(ellipse, rgba(255,255,255,0.08) 0%, transparent 60%);
+    filter: blur(10px);
+  }
+  .imgbox-label { position: relative; z-index: 1; }
+
+  /* ─── Findings + pathway ─── */
+  .findings {
+    padding: 14px; border-left: 3px solid var(--accent); background: rgba(0, 217, 200, 0.05);
+    border-radius: 4px; margin-top: 12px;
+  }
+  .findings .head { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--accent); letter-spacing: 0.8px; text-transform: uppercase; font-weight: 700; margin-bottom: 8px; }
+  .findings p { margin: 0; line-height: 1.55; }
+
+  .pathway {
+    margin-top: 16px;
+    padding: 16px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.08) 0%, rgba(0, 217, 200, 0.05) 100%);
+    border: 1px solid rgba(167, 139, 250, 0.25);
+    border-radius: 10px;
+  }
+  .pathway .head {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; color: var(--money); letter-spacing: 0.8px;
+    text-transform: uppercase; font-weight: 800; margin-bottom: 4px;
+  }
+  .pathway .rule { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 4px 0 14px; font-style: italic; }
+  .pathway ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+  .pathway li {
+    display: grid; grid-template-columns: 1fr auto;
+    gap: 12px; align-items: baseline;
+    padding: 8px 12px;
+    background: var(--card-2);
+    border-radius: 8px;
+    border: 1px solid var(--border);
+  }
+  .pathway .step { font-size: 13px; }
+  .pathway .step .cadence { color: var(--muted); font-size: 11px; margin-top: 2px; }
+  .pathway .price { color: var(--money); font-weight: 700; font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 13px; white-space: nowrap; }
+  .pathway .total {
+    margin-top: 12px; padding-top: 12px;
+    border-top: 1px dashed rgba(167, 139, 250, 0.3);
+    display: flex; justify-content: space-between; align-items: baseline;
+  }
+  .pathway .total-label { font-size: 11px; letter-spacing: 1px; color: var(--muted); text-transform: uppercase; font-weight: 700; }
+  .pathway .total-value { font-family: 'SF Mono', Menlo, Consolas, monospace; font-size: 22px; font-weight: 800; color: var(--money); }
+
+  /* ─── Timeline (physician) ─── */
+  .timeline { position: relative; padding-left: 20px; }
+  .timeline::before {
+    content: ''; position: absolute; left: 5px; top: 8px; bottom: 8px;
+    width: 2px; background: var(--border);
+  }
+  .timeline-item {
+    position: relative; padding: 0 0 20px 20px;
+  }
+  .timeline-item::before {
+    content: ''; position: absolute; left: -20px; top: 6px;
+    width: 12px; height: 12px; border-radius: 50%;
+    background: var(--accent); box-shadow: 0 0 12px rgba(0, 217, 200, 0.5);
+    border: 3px solid var(--bg);
+  }
+  .timeline-date { font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: 0.5px; }
+  .timeline-title { font-size: 14px; font-weight: 600; margin-top: 2px; }
+  .timeline-body { font-size: 13px; color: #cbd5e1; margin-top: 4px; line-height: 1.5; }
+
+  /* ─── Voice/comms log ─── */
+  .comms { display: flex; flex-direction: column; gap: 8px; }
+  .comm-item {
+    padding: 10px 12px;
+    background: var(--card-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font-size: 12px;
+  }
+  .comm-head {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 4px;
+  }
+  .comm-lang { font-size: 10px; padding: 2px 6px; background: var(--card); border-radius: 4px; color: var(--muted); }
+  .comm-time { color: var(--muted); font-size: 10px; }
+  .comm-body { color: #cbd5e1; }
+
+  /* ─── HR view ─── */
+  .flagged-row {
+    display: grid; grid-template-columns: 90px 140px 1fr auto;
+    gap: 12px; align-items: center;
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    font-size: 13px;
+  }
+  .flagged-row:last-child { border-bottom: none; }
+  .flagged-row .wid { font-family: 'SF Mono', Menlo, monospace; font-size: 12px; color: var(--muted); }
+
+  .highlight-money {
+    padding: 20px 24px;
+    background: linear-gradient(135deg, rgba(167, 139, 250, 0.10) 0%, rgba(0, 217, 200, 0.10) 100%);
+    border: 1px solid rgba(167, 139, 250, 0.35);
+    border-radius: 12px;
+    margin-top: 20px;
+  }
+  .highlight-money .label { font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--muted); font-weight: 700; }
+  .highlight-money .value {
+    font-size: 44px; font-weight: 800; margin-top: 6px; line-height: 1;
+    background: linear-gradient(135deg, var(--money) 0%, var(--accent) 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .highlight-money .note { color: var(--muted); font-size: 12px; margin-top: 10px; line-height: 1.5; }
+
+  /* ─── Loading ─── */
+  .loading { padding: 60px; text-align: center; color: var(--muted); }
+
+  /* ─── Section header ─── */
+  .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .section-head h1 { font-size: 22px; font-weight: 700; margin: 0; }
+  .section-head p { color: var(--muted); font-size: 13px; margin: 4px 0 0; }
+
+  hr.sep { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+
+  /* ─── Footer strip ─── */
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px; margin-top: 32px;
+    border-top: 1px solid var(--border);
+    color: var(--muted); font-size: 11px; letter-spacing: 0.5px;
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">V</div>
+    <div>
+      <div class="brand-name">VOXTR RAD</div>
+      <div class="brand-tag">CLINICAL OPERATING LAYER · BOOM HEALTH</div>
+    </div>
+  </div>
+  <nav class="role-tabs" id="roleTabs">
+    <button data-role="radiologist" class="active">Radiologist</button>
+    <button data-role="physician">Physician</button>
+    <button data-role="coordinator">Coordinator</button>
+    <button data-role="hr">Employer / HR</button>
+  </nav>
+  <div class="live"><span class="pulse"></span> LIVE · voice channel connected</div>
+</header>
+
+<main id="main">
+  <div class="loading">Loading…</div>
+</main>
+
+<div class="footer">
+  <div>voxtr-rad · synthetic data · no PHI</div>
+  <div id="clock"></div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────────────────────
+// Utilities
+// ─────────────────────────────────────────────────────────────
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const el = (tag, attrs = {}, ...children) => {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') e.className = v;
+    else if (k === 'html') e.innerHTML = v;
+    else if (k.startsWith('on') && typeof v === 'function') e.addEventListener(k.slice(2), v);
+    else if (v !== undefined && v !== null) e.setAttribute(k, v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined) continue;
+    e.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+  }
+  return e;
+};
+const usd = (n) => n === undefined || n === null ? '—' : '$' + n.toLocaleString(undefined, { maximumFractionDigits: 0 });
+const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
+async function api(path) {
+  const r = await fetch(path);
+  if (!r.ok) throw new Error(`${path} → ${r.status}`);
+  return r.json();
+}
+
+// ─────────────────────────────────────────────────────────────
+// State
+// ─────────────────────────────────────────────────────────────
+let state = { role: 'radiologist', selectedMrn: '84421' };
+
+// ─────────────────────────────────────────────────────────────
+// Views
+// ─────────────────────────────────────────────────────────────
+async function renderRadiologist() {
+  const main = $('#main');
+  main.innerHTML = '';
+
+  // section head
+  main.appendChild(el('div', { class: 'section-head' },
+    el('div', {},
+      el('h1', {}, 'Reading Worklist'),
+      el('p', {}, 'Every study on the platform. AI-triaged. Priors + insurance-mandated pathway surfaced automatically.')
+    ),
+    el('div', { class: 'subtle' }, `Signed in as `, el('b', {}, 'Dr. S. Rashid · Musculoskeletal'))
+  ));
+
+  const patients = await api('/api/patients');
+
+  // Layout
+  const grid = el('div', { class: 'grid grid-3' });
+  main.appendChild(grid);
+
+  // Worklist card
+  const worklist = el('div', { class: 'card' },
+    el('h3', {}, 'Worklist · today'),
+    el('div', { class: 'worklist', id: 'worklist' })
+  );
+
+  const worklistEl = worklist.querySelector('#worklist');
+  const fabricated = [
+    { mrn: '84421', name: 'Ahmed Al Blooshi', modality: 'MRI Knee', body: 'right knee', pill: 'urgent', tag: 'STAT · orthopaedic hold' },
+    { mrn: '77208', name: 'Fatima Al Hosani', modality: 'US Obstetric', body: '12+2 weeks', pill: 'ok', tag: 'Routine · antenatal 5-scan schedule' },
+  ];
+  fabricated.forEach((p) => {
+    const item = el('div', {
+      class: 'worklist-item' + (p.mrn === state.selectedMrn ? ' active' : ''),
+      onclick: () => { state.selectedMrn = p.mrn; renderRadiologist(); },
+    },
+      el('div', { class: 'name' }, `${p.name}  ·  MRN ${p.mrn}`),
+      el('div', { class: 'meta' },
+        el('span', { class: 'pill ai' }, 'AI-triaged'),
+        el('span', {}, `${p.modality} · ${p.body}`)
+      ),
+      el('div', { class: 'meta' },
+        el('span', { class: 'pill ' + p.pill }, p.pill === 'urgent' ? 'PRIORITY' : 'ROUTINE'),
+        el('span', {}, p.tag)
+      )
+    );
+    worklistEl.appendChild(item);
+  });
+  // Fake extra items for volume feel
+  const fake = [
+    { name: 'Rafiq Khan', mrn: '10241', modality: 'CXR Visa medical', pill: 'ok', tag: 'AI: normal · auto-signed pathway ready' },
+    { name: 'Divya Menon', mrn: '10298', modality: 'US Upper abdomen', pill: 'ok', tag: 'Routine' },
+    { name: 'Mohammed Al Shamsi', mrn: '10342', modality: 'CT Chest w/o contrast', pill: 'stat-flag', tag: 'AI: nodule flagged · verify' },
+    { name: 'Sunita Verma', mrn: '10367', modality: 'CXR Visa medical', pill: 'ok', tag: 'AI: normal · signed' },
+    { name: 'Yousef Nasser', mrn: '10391', modality: 'MRI Lumbar', pill: 'ok', tag: 'Routine' },
+  ];
+  fake.forEach((p) => {
+    const item = el('div', { class: 'worklist-item' },
+      el('div', { class: 'name' }, `${p.name}  ·  MRN ${p.mrn}`),
+      el('div', { class: 'meta' },
+        el('span', { class: 'pill ai' }, 'AI-triaged'),
+        el('span', {}, p.modality)
+      ),
+      el('div', { class: 'meta' },
+        el('span', { class: 'pill ' + p.pill }, p.pill === 'stat-flag' ? 'AI-FLAG' : 'ROUTINE'),
+        el('span', {}, p.tag)
+      )
+    );
+    worklistEl.appendChild(item);
+  });
+  grid.appendChild(worklist);
+
+  // Selected study card (center)
+  const patient = await api('/api/patient/' + state.selectedMrn);
+  const latest = patient.priors[patient.priors.length - 1];
+
+  const studyCard = el('div', { class: 'card' });
+  studyCard.appendChild(el('h3', {}, 'Current study'));
+  studyCard.appendChild(el('h2', {}, `${latest.modality} · ${latest.body_part}`));
+  studyCard.appendChild(el('div', { class: 'subtle' }, `${patient.name} · MRN ${patient.mrn} · DOB ${patient.dob}`));
+
+  const imgs = el('div', { class: 'grid grid-2', style: 'margin-top: 14px; gap: 10px;' },
+    el('div', { class: 'imgbox' }, el('span', { class: 'imgbox-label' }, 'AX PD FAT-SAT')),
+    el('div', { class: 'imgbox' }, el('span', { class: 'imgbox-label' }, 'SAG T2'))
+  );
+  studyCard.appendChild(imgs);
+
+  studyCard.appendChild(el('div', { class: 'findings' },
+    el('div', { class: 'head' }, 'Voxtr AI-drafted note · pending your sign-off'),
+    el('p', {}, latest.finding)
+  ));
+
+  grid.appendChild(studyCard);
+
+  // Priors + pathway card
+  const rightCol = el('div', { class: 'card' });
+  rightCol.appendChild(el('h3', {}, 'Priors surfaced by Voxtr'));
+
+  patient.priors.forEach((pr) => {
+    rightCol.appendChild(el('div', { class: 'timeline' },
+      el('div', { class: 'timeline-item' },
+        el('div', { class: 'timeline-date' }, `${fmtDate(pr.date)} · ${pr.reader}`),
+        el('div', { class: 'timeline-title' }, `${pr.modality} · ${pr.body_part}`),
+        el('div', { class: 'timeline-body' }, pr.finding)
+      )
+    ));
+  });
+
+  if (patient.notes && patient.notes.length) {
+    rightCol.appendChild(el('h3', { style: 'margin-top: 16px;' }, 'Referring notes'));
+    patient.notes.forEach((n) => {
+      rightCol.appendChild(el('div', { class: 'timeline' },
+        el('div', { class: 'timeline-item' },
+          el('div', { class: 'timeline-date' }, `${fmtDate(n.date)} · ${n.author}`),
+          el('div', { class: 'timeline-body' }, n.summary)
+        )
+      ));
+    });
+  }
+
+  if (patient.medications && patient.medications.length) {
+    rightCol.appendChild(el('h3', { style: 'margin-top: 16px;' }, 'Current meds'));
+    patient.medications.forEach((m) => {
+      rightCol.appendChild(el('div', { style: 'font-size: 13px; padding: 4px 0;' },
+        el('b', {}, m.drug), ` · since ${fmtDate(m.started)}`,
+        m.note ? el('div', { class: 'subtle', style: 'font-size: 11px; margin-top: 2px;' }, m.note) : null
+      ));
+    });
+  }
+
+  // Care pathway — the money shot
+  const pathway = latest.insurance_mandated_pathway;
+  if (pathway) {
+    const pathwayEl = el('div', { class: 'pathway' });
+    pathwayEl.appendChild(el('div', { class: 'head' }, `Insurance-mandated pathway · ${patient.insurance ? patient.insurance.payer : 'payer'}`));
+    pathwayEl.appendChild(el('div', { class: 'rule' }, pathway.insurance_rule));
+    const ul = el('ul', {});
+    (pathway.mandated_followups || []).forEach((f) => {
+      const step = el('div', { class: 'step' },
+        f.step,
+        f.cadence ? el('div', { class: 'cadence' }, f.cadence) : null
+      );
+      const price = el('div', { class: 'price' }, f.price_usd === 0 ? 'bundled' : (f.subtotal_usd ? usd(f.subtotal_usd) : usd(f.price_usd)));
+      ul.appendChild(el('li', {}, step, price));
+    });
+    pathwayEl.appendChild(ul);
+    const rs = pathway.revenue_summary_usd;
+    if (rs) {
+      const total = rs.conservative_pathway_total || rs.pathway_total || 0;
+      pathwayEl.appendChild(el('div', { class: 'total' },
+        el('div', { class: 'total-label' }, `Total mandated revenue · ${rs.time_horizon_months || '?'} months`),
+        el('div', { class: 'total-value' }, usd(total))
+      ));
+    }
+    rightCol.appendChild(pathwayEl);
+  }
+
+  grid.appendChild(rightCol);
+}
+
+// ─────────────────────────────────────────────────────────────
+async function renderPhysician() {
+  const main = $('#main');
+  main.innerHTML = '';
+
+  main.appendChild(el('div', { class: 'section-head' },
+    el('div', {},
+      el('h1', {}, 'Patient Record'),
+      el('p', {}, 'Priors, notes, meds, active care plan with insurance-mandated next steps.')
+    ),
+    el('div', { class: 'subtle' }, `Signed in as `, el('b', {}, 'Dr. Al Marzooqi · Boom Health'))
+  ));
+
+  const patient = await api('/api/patient/84421');
+  const grid = el('div', { class: 'grid grid-2' });
+
+  // Left: patient summary + timeline
+  const left = el('div', { class: 'card' });
+  left.appendChild(el('h3', {}, 'Patient'));
+  left.appendChild(el('h2', {}, patient.name));
+  left.appendChild(el('div', { class: 'subtle' },
+    `MRN ${patient.mrn} · DOB ${patient.dob} · ${patient.insurance ? patient.insurance.payer : ''}`
+  ));
+
+  left.appendChild(el('hr', { class: 'sep' }));
+  left.appendChild(el('h3', {}, 'Imaging timeline'));
+  const tl = el('div', { class: 'timeline' });
+  patient.priors.forEach((pr) => {
+    tl.appendChild(el('div', { class: 'timeline-item' },
+      el('div', { class: 'timeline-date' }, `${fmtDate(pr.date)} · ${pr.reader}`),
+      el('div', { class: 'timeline-title' }, `${pr.modality} · ${pr.body_part}`),
+      el('div', { class: 'timeline-body' }, pr.finding)
+    ));
+  });
+  left.appendChild(tl);
+
+  left.appendChild(el('h3', {}, 'Clinical notes'));
+  const nl = el('div', { class: 'timeline' });
+  patient.notes.forEach((n) => {
+    nl.appendChild(el('div', { class: 'timeline-item' },
+      el('div', { class: 'timeline-date' }, `${fmtDate(n.date)} · ${n.author}`),
+      el('div', { class: 'timeline-body' }, n.summary)
+    ));
+  });
+  left.appendChild(nl);
+
+  left.appendChild(el('h3', {}, 'Current medications'));
+  patient.medications.forEach((m) => {
+    left.appendChild(el('div', { style: 'font-size: 13px; padding: 4px 0;' },
+      el('b', {}, m.drug), ` · since ${fmtDate(m.started)}`,
+      m.note ? el('div', { class: 'subtle', style: 'font-size: 11px; margin-top: 2px;' }, m.note) : null
+    ));
+  });
+
+  grid.appendChild(left);
+
+  // Right: care plan pathway
+  const right = el('div', { class: 'card' });
+  right.appendChild(el('h3', {}, 'Active care plan'));
+  const latest = patient.priors[patient.priors.length - 1];
+  right.appendChild(el('h2', {}, latest.finding));
+
+  const pathway = latest.insurance_mandated_pathway;
+  if (pathway) {
+    const pathwayEl = el('div', { class: 'pathway' });
+    pathwayEl.appendChild(el('div', { class: 'head' }, `Mandated by ${patient.insurance.payer}`));
+    pathwayEl.appendChild(el('div', { class: 'rule' }, pathway.insurance_rule));
+    const ul = el('ul', {});
+    (pathway.mandated_followups || []).forEach((f) => {
+      const step = el('div', { class: 'step' },
+        f.step,
+        f.cadence ? el('div', { class: 'cadence' }, f.cadence) : null
+      );
+      const price = el('div', { class: 'price' }, f.price_usd === 0 ? 'bundled' : (f.subtotal_usd ? usd(f.subtotal_usd) : usd(f.price_usd)));
+      ul.appendChild(el('li', {}, step, price));
+    });
+    pathwayEl.appendChild(ul);
+    const rs = pathway.revenue_summary_usd;
+    if (rs) {
+      const total = rs.conservative_pathway_total || rs.pathway_total || 0;
+      pathwayEl.appendChild(el('div', { class: 'total' },
+        el('div', { class: 'total-label' }, `Total pathway revenue · ${rs.time_horizon_months || '?'} months`),
+        el('div', { class: 'total-value' }, usd(total))
+      ));
+    }
+    right.appendChild(pathwayEl);
+
+    // Escalation pathway if surgical
+    if (pathway.if_conservative_fails_pathway) {
+      const esc = el('div', { class: 'pathway', style: 'margin-top: 12px;' });
+      esc.appendChild(el('div', { class: 'head' }, 'If conservative fails · surgical pathway'));
+      const ul2 = el('ul', {});
+      pathway.if_conservative_fails_pathway.forEach((f) => {
+        const step = el('div', { class: 'step' },
+          f.step,
+          f.note ? el('div', { class: 'cadence' }, f.note) : null
+        );
+        const price = el('div', { class: 'price' }, f.price_usd === 0 ? 'incl.' : (f.subtotal_usd ? usd(f.subtotal_usd) : usd(f.price_usd)));
+        ul2.appendChild(el('li', {}, step, price));
+      });
+      esc.appendChild(ul2);
+      esc.appendChild(el('div', { class: 'total' },
+        el('div', { class: 'total-label' }, 'Surgical pathway total'),
+        el('div', { class: 'total-value' }, usd(pathway.revenue_summary_usd.surgical_pathway_total))
+      ));
+      right.appendChild(esc);
+    }
+  }
+
+  grid.appendChild(right);
+  main.appendChild(grid);
+}
+
+// ─────────────────────────────────────────────────────────────
+async function renderCoordinator() {
+  const main = $('#main');
+  main.innerHTML = '';
+
+  main.appendChild(el('div', { class: 'section-head' },
+    el('div', {},
+      el('h1', {}, 'Coordination Desk'),
+      el('p', {}, 'Today\'s appointments · Voxtr voice contact log · Scan prep protocols per patient, in their language.')
+    ),
+    el('div', { class: 'subtle' }, `Signed in as `, el('b', {}, 'M. Rahman · Coordinator'))
+  ));
+
+  const apps = await api('/api/appointments');
+  const preps = await api('/api/scan-preps');
+
+  // Stats strip
+  main.appendChild(el('div', { class: 'grid grid-4-stats', style: 'margin-bottom: 16px;' },
+    stat('Appointments today', '38', 'Across 4 centres'),
+    stat('Auto-confirmed', '32 / 38', 'By Voxtr voice'),
+    stat('Languages served', '11', 'Voice+text native'),
+    stat('No-show rate ↓', '18%', 'vs pre-Voxtr baseline'),
+  ));
+
+  const grid = el('div', { class: 'grid grid-2' });
+
+  // Left — Today's appointments card
+  const left = el('div', { class: 'card' });
+  left.appendChild(el('h3', {}, "Today's appointments"));
+
+  const appList = [
+    { patient: 'Fatima Al Hosani (77208)', when: '10:00 AM', scan: 'Ultrasound · lower abdomen', prep: 'ultrasound_lower_abdomen', lang: 'English', centre: 'Jumeirah', doctor: 'Dr. Al Marzooqi' },
+    { patient: 'Rafiq Khan (10241)', when: '2:00 PM', scan: 'Visa medical · CXR', prep: 'visa_medical_chest_xray', lang: 'Urdu', centre: 'Al Qusais', doctor: 'MoH Fitness' },
+    { patient: 'Divya Menon (10298)', when: '3:30 PM', scan: 'Ultrasound · upper abdomen', prep: 'ultrasound_upper_abdomen', lang: 'Malayalam', centre: 'Karama', doctor: 'Dr. Menon' },
+    { patient: 'Mohammed Al Shamsi (10342)', when: '4:15 PM', scan: 'CT chest', prep: 'ct_contrast', lang: 'Arabic', centre: 'Jumeirah', doctor: 'Dr. Al Rashidi' },
+  ];
+
+  appList.forEach((a) => {
+    const p = preps[a.prep] || {};
+    left.appendChild(el('div', { class: 'worklist-item', style: 'margin-bottom: 8px;' },
+      el('div', { class: 'name' }, a.patient, ' · ', a.when),
+      el('div', { class: 'meta' },
+        el('span', { class: 'pill ai' }, a.lang),
+        el('span', {}, `${a.scan} · ${a.centre} · ${a.doctor}`)
+      ),
+      el('div', { class: 'meta', style: 'margin-top: 6px; color: #cbd5e1;' },
+        el('span', {}, p.prep || 'Standard prep')
+      )
+    ));
+  });
+
+  grid.appendChild(left);
+
+  // Right — Voxtr voice contact log
+  const right = el('div', { class: 'card' });
+  right.appendChild(el('h3', {}, 'Voxtr voice contact log · last hour'));
+
+  const commsList = [
+    { who: 'Fatima Al Hosani', lang: 'EN', time: '2 min ago', body: 'Confirmed 10 AM ultrasound. Prep instructions delivered as voice note.' },
+    { who: 'Rafiq Khan', lang: 'UR', time: '18 min ago', body: 'اپوائنٹمنٹ کی تصدیق کر دی گئی · centre location + documents + fasting sent.' },
+    { who: 'Divya Menon', lang: 'ML', time: '31 min ago', body: 'ഉപ്പുവയർ സ്കാൻ · fasting 6 hours confirmed via voice note reply.' },
+    { who: 'Mohammed Al Shamsi', lang: 'AR', time: '52 min ago', body: 'تم تأكيد الفحص المقطعي · contrast prep + creatinine reminder sent.' },
+    { who: 'Sunita Verma', lang: 'HI', time: '58 min ago', body: 'रिपोर्ट भेजी गई · normal chest X-ray, cleared for visa medical.' },
+  ];
+
+  const comms = el('div', { class: 'comms' });
+  commsList.forEach((c) => {
+    comms.appendChild(el('div', { class: 'comm-item' },
+      el('div', { class: 'comm-head' },
+        el('div', {}, el('b', {}, c.who), ' ', el('span', { class: 'comm-lang' }, c.lang)),
+        el('div', { class: 'comm-time' }, c.time)
+      ),
+      el('div', { class: 'comm-body' }, c.body)
+    ));
+  });
+  right.appendChild(comms);
+
+  grid.appendChild(right);
+  main.appendChild(grid);
+}
+
+// ─────────────────────────────────────────────────────────────
+async function renderHR() {
+  const main = $('#main');
+  main.innerHTML = '';
+
+  main.appendChild(el('div', { class: 'section-head' },
+    el('div', {},
+      el('h1', {}, 'Employer Dashboard'),
+      el('p', {}, 'Workforce medical status · flagged workers · downstream mandated revenue.')
+    ),
+    el('div', { class: 'subtle' }, `Viewing `, el('b', {}, 'Transguard Group · this month'))
+  ));
+
+  const data = await api('/api/employer/transguard');
+
+  // Stats row
+  main.appendChild(el('div', { class: 'grid grid-4-stats', style: 'margin-bottom: 16px;' },
+    stat('Screened', data.total_screened.toLocaleString(), data.period),
+    stat('Cleared', data.cleared.toLocaleString(), `${(data.first_pass_rate * 100).toFixed(0)}% first-pass rate`),
+    stat('Flagged', data.flagged_followup.toString(), `${data.flag_breakdown.tb_screening} TB · ${data.flag_breakdown.elevated_blood_glucose} glucose`),
+    stat('Avg TAT', `${data.average_tat_hours}h`, 'Booking → cleared')
+  ));
+
+  const grid = el('div', { class: 'grid grid-2' });
+
+  // Left: flagged workers
+  const left = el('div', { class: 'card' });
+  left.appendChild(el('h3', {}, 'Flagged workers · follow-up in progress'));
+  data.flagged_workers.forEach((w) => {
+    const p = w.insurance_mandated_pathway;
+    left.appendChild(el('div', { class: 'flagged-row' },
+      el('div', { class: 'wid' }, w.id),
+      el('div', {}, el('span', { class: w.flag.includes('TB') ? 'pill urgent' : 'pill stat-flag' }, w.flag)),
+      el('div', { class: 'subtle' }, w.status),
+      el('div', { class: 'price', style: 'color: var(--money); font-family: SF Mono, Menlo, Consolas, monospace; font-weight: 700;' },
+        p ? usd(p.revenue_summary_usd.pathway_total) : '—')
+    ));
+  });
+
+  grid.appendChild(left);
+
+  // Right: revenue forecast + pathway detail
+  const right = el('div', { class: 'card' });
+  right.appendChild(el('h3', {}, 'Downstream revenue · mandated by insurers'));
+  right.appendChild(el('p', { class: 'subtle', style: 'margin: 0 0 12px;' },
+    'Every flagged worker triggers an insurance-mandated pathway. Boom Health owns the entire billing chain.'));
+
+  const f = data.downstream_revenue_forecast_usd;
+  right.appendChild(el('div', { class: 'highlight-money' },
+    el('div', { class: 'label' }, 'Mandated revenue · this month\'s flagged cohort'),
+    el('div', { class: 'value' }, usd(f.cohort_total_this_month)),
+    el('div', { class: 'note' }, f.note)
+  ));
+
+  right.appendChild(el('h3', { style: 'margin-top: 18px;' }, 'Per-worker pathway breakdown'));
+  const tbCard = el('div', { style: 'padding: 10px 14px; background: var(--card-2); border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;' },
+    el('div', {}, el('b', {}, 'TB screening flagged'), el('div', { class: 'subtle' }, '5 workers this month')),
+    el('div', { class: 'price', style: 'color: var(--money); font-family: SF Mono, Menlo, Consolas, monospace; font-weight: 700; font-size: 16px;' },
+      `${usd(f.tb_pathway_per_worker)} / worker`)
+  );
+  const glCard = el('div', { style: 'padding: 10px 14px; background: var(--card-2); border-radius: 8px; display: flex; justify-content: space-between; align-items: center;' },
+    el('div', {}, el('b', {}, 'Elevated glucose'), el('div', { class: 'subtle' }, '2 workers this month')),
+    el('div', { class: 'price', style: 'color: var(--money); font-family: SF Mono, Menlo, Consolas, monospace; font-weight: 700; font-size: 16px;' },
+      `${usd(f.glucose_pathway_per_worker)} / worker`)
+  );
+  right.appendChild(tbCard);
+  right.appendChild(glCard);
+
+  grid.appendChild(right);
+  main.appendChild(grid);
+}
+
+// ─────────────────────────────────────────────────────────────
+// Stat card helper
+function stat(label, value, sub, cls = '') {
+  return el('div', { class: 'stat ' + cls },
+    el('div', { class: 'stat-label' }, label),
+    el('div', { class: 'stat-value' }, value),
+    el('div', { class: 'stat-sub' }, sub)
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Routing
+// ─────────────────────────────────────────────────────────────
+const views = {
+  radiologist: renderRadiologist,
+  physician: renderPhysician,
+  coordinator: renderCoordinator,
+  hr: renderHR,
+};
+
+function setRole(role) {
+  state.role = role;
+  $$('#roleTabs button').forEach((b) => b.classList.toggle('active', b.dataset.role === role));
+  views[role]().catch((err) => {
+    $('#main').innerHTML = `<div class="card"><h3>Load failed</h3><p>${err.message}</p></div>`;
+  });
+}
+
+$$('#roleTabs button').forEach((b) => {
+  b.addEventListener('click', () => setRole(b.dataset.role));
+});
+
+// Clock
+setInterval(() => {
+  const d = new Date();
+  const t = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  $('#clock').textContent = `${d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short' })} · ${t} GST`;
+}, 1000);
+
+// Boot
+setRole('radiologist');
+</script>
+
+</body>
+</html>

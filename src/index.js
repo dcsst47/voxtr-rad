@@ -326,6 +326,69 @@ app.post("/webhook/whatsapp", async (req, res) => {
   return twimlOk(res);
 });
 
+// ═══════════════════════════════════════════════════════════════════════
+// DASHBOARD API — read-only endpoints that expose demoData to public/index.html.
+// Kept simple: no auth, no rate limit — this is a synthetic-data sales demo, not prod.
+// ═══════════════════════════════════════════════════════════════════════
+const {
+  SCAN_PREPS,
+  CARE_PATHWAYS,
+  PATIENTS,
+  WORKER_COHORTS,
+  APPOINTMENTS,
+} = require("./demoData");
+
+function inlinePathway(obj, key = "care_pathway_key") {
+  if (!obj || !obj[key]) return obj;
+  return { ...obj, insurance_mandated_pathway: CARE_PATHWAYS[obj[key]] || null };
+}
+
+app.get("/api/patients", (_req, res) => {
+  res.json(Object.values(PATIENTS).map((p) => ({
+    mrn: p.mrn,
+    name: p.name,
+    dob: p.dob,
+    latest_study: p.priors[p.priors.length - 1] || null,
+    insurance: p.insurance || null,
+  })));
+});
+
+app.get("/api/patient/:mrn", (req, res) => {
+  const p = PATIENTS[req.params.mrn];
+  if (!p) return res.status(404).json({ error: "patient not found" });
+  res.json({
+    ...p,
+    priors: p.priors.map((pr) => inlinePathway(pr)),
+  });
+});
+
+app.get("/api/employers", (_req, res) => {
+  res.json(Object.keys(WORKER_COHORTS).map((k) => ({
+    key: k,
+    employer: WORKER_COHORTS[k].employer,
+    total_screened: WORKER_COHORTS[k].total_screened,
+    flagged_followup: WORKER_COHORTS[k].flagged_followup,
+  })));
+});
+
+app.get("/api/employer/:key", (req, res) => {
+  const e = WORKER_COHORTS[req.params.key];
+  if (!e) return res.status(404).json({ error: "employer not found" });
+  res.json({
+    ...e,
+    flagged_workers: e.flagged_workers.map((w) => inlinePathway(w)),
+  });
+});
+
+app.get("/api/pathways", (_req, res) => {
+  res.json(
+    Object.entries(CARE_PATHWAYS).map(([k, v]) => ({ key: k, ...v }))
+  );
+});
+
+app.get("/api/scan-preps", (_req, res) => res.json(SCAN_PREPS));
+app.get("/api/appointments", (_req, res) => res.json(APPOINTMENTS));
+
 app.get("/health", (_req, res) => {
   res.json({
     status: "ok",
