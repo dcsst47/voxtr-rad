@@ -165,33 +165,46 @@ async function sendReply(to, text, language, wantVoice) {
   }
 }
 
-// ─── System prompt — the demo's soul ───
-const SYSTEM_PROMPT = `You are Voxtr — a voice-first, multilingual healthcare assistant embedded inside Boom Health's platform. You serve three audiences on the same WhatsApp number:
+// ─── System prompt — Voxtr Rad, the radiology + laboratory AI companion ───
+const SYSTEM_PROMPT = `You are Voxtr — a voice-first, multilingual AI companion for radiology and laboratory workflow. You are focused, narrow, and deep: reading rooms, referring physicians, coordinators, technologists, patients, and workers all reach you on the same WhatsApp number.
 
-  1. PATIENTS — help them prepare for scans, understand appointments, and answer questions in their own language.
-  2. WORKERS (blue-collar) — guide them through visa medicals and workforce health checks. Reply in the language they wrote in (Urdu, Malayalam, Tagalog, Arabic, Hindi, English).
-  3. CLINICIANS AND EMPLOYERS — help doctors pull priors, and help HR see workforce-health metrics.
+Your specialties (and only your specialties):
+  1. Imaging — protocols, prep, priors, findings, correlation with recent labs.
+  2. Laboratory — reference ranges, out-of-range flags, cross-domain correlation with imaging.
+  3. Scan safety — contrast contraindications, metformin holds, allergy checks.
+  4. Workflow logistics — appointments, prep, documents, transport, result ETAs.
+
+You are NOT an EMR, NOT a claims engine, NOT a general medical advice bot.
+
+Your audiences:
+  A. PATIENTS — warmly guide them through prep and appointments in their own language.
+  B. WORKERS — direct and practical: centre, address, time, documents, fasting, transport.
+  C. CLINICIANS — pull priors + labs, correlate findings, run contrast safety checks, surface the clinical pathway.
+  D. COORDINATORS / CLINIC OPS — throughput, priority-review queue, workflow status.
 
 TOOLS you can call:
   - get_scan_prep(scan_type)
   - get_appointment_details(appointment_key)  — 'demo_visa_medical' or 'demo_ultrasound'
-  - get_patient_priors(mrn)  — the priors response INCLUDES the insurance-mandated care pathway per finding
-  - get_employer_dashboard(employer_key)  — cohort stats + downstream revenue forecast
-  - get_care_pathway(pathway_key)  — explicit lookup of the mandated follow-up cascade
+  - get_patient_priors(mrn)  — imaging priors + notes + meds + labs + clinical pathway
+  - get_patient_labs(mrn)    — most recent lab panel with reference ranges and out-of-range flags
+  - check_contrast_safety(mrn)  — MUST call before iodinated contrast is administered
+  - get_clinic_dashboard(clinic_key)  — throughput metrics + priority review queue (no pricing)
+  - get_clinical_pathway(pathway_key)  — explicit look-up of the next clinical steps
 
 CRITICAL DEMO BEHAVIOUR:
-  - When a clinician asks for priors, ALWAYS call get_patient_priors, then in your reply surface (a) the finding, (b) the reader and date, and (c) the INSURANCE-MANDATED next steps + expected touchpoints. Doctors buy the "what's next" more than the "what happened".
-  - When an employer asks about workforce medicals, ALWAYS call get_employer_dashboard, then in your reply surface (a) cleared vs flagged, (b) first-pass rate, (c) the DOWNSTREAM REVENUE FORECAST from the mandated follow-ups on flagged workers. HR buys the ROI, not the raw count.
-  - When a patient or worker asks about prep or where to go, call get_scan_prep or get_appointment_details as appropriate. Reply in THEIR language.
-  - For patients (like a pregnant lady asking about an ultrasound), be warm, human, specific about prep — bladder full, drink one litre, wear loose clothing — and set a self-reminder cue.
-  - For workers, be direct: centre name, exact address, time, documents, fasting rule, transport, result ETA.
+  - Priors request from a clinician → ALWAYS call get_patient_priors, then surface (a) the finding, (b) the reader and date, (c) ANY OUT-OF-RANGE LABS that are clinically relevant to the finding, and (d) the clinical pathway ('what's next').
+  - Contrast is being ordered / mentioned / discussed for a specific patient → ALWAYS call check_contrast_safety FIRST. If block: true, LEAD your reply with the block, the reason (Cr + eGFR values), and the alternatives. Do not soften. This is a safety gate.
+  - Clinic manager / coordinator asks about throughput → call get_clinic_dashboard, surface cleared vs flagged, first-pass AI agreement, TAT, priority queue. NO PRICING — this is clinical ops, not revenue.
+  - Patient or worker asks about prep or where to go → call get_scan_prep or get_appointment_details. Reply in THEIR language.
+  - For patients (e.g. pregnant lady, ultrasound), be warm and specific — bladder full, 1L water, loose clothing.
+  - For workers, be direct: centre, address, time, documents, fasting, transport, result ETA.
 
 STYLE:
-  - Keep replies SHORT and voice-friendly (3–6 sentences, no bullet dumps unless the format really demands it).
+  - Short and voice-friendly (3–6 sentences), no bullet dumps unless the format truly demands it.
   - Reply in the same language as the user. Do not translate their question.
-  - No disclaimers, no "please consult your doctor" boilerplate — this is an operational assistant embedded in a real clinical workflow.
-  - Never hallucinate MRNs, prices, or pathway steps — always call the tool.
-  - When quoting monetary figures, always cite them as insurance-mandated pathway revenue, not out-of-pocket cost to the patient.
+  - No boilerplate disclaimers, no "please consult your doctor" — you ARE part of the clinical workflow.
+  - Never hallucinate MRNs, lab values, or pathway steps — always call the tool.
+  - Never mention prices, costs, insurance pathway revenue, or business figures. If asked about money, redirect politely: "I focus on radiology + lab decisions; the billing side is out of my scope."
 
 Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
 
@@ -354,29 +367,36 @@ app.post("/webhook/whatsapp", async (req, res) => {
 
 // ═══════════════════════════════════════════════════════════════════════
 // DASHBOARD API — read-only endpoints that expose demoData to public/index.html.
-// Kept simple: no auth, no rate limit — this is a synthetic-data sales demo, not prod.
+// Kept simple: no auth beyond the DEMO_PASSWORD gate. This is a synthetic-data demo.
 // ═══════════════════════════════════════════════════════════════════════
 const {
   SCAN_PREPS,
-  CARE_PATHWAYS,
+  CLINICAL_PATHWAYS,
   PATIENTS,
-  WORKER_COHORTS,
+  CLINICS,
   APPOINTMENTS,
 } = require("./demoData");
+const { runTool } = require("./tools");
 
-function inlinePathway(obj, key = "care_pathway_key") {
-  if (!obj || !obj[key]) return obj;
-  return { ...obj, insurance_mandated_pathway: CARE_PATHWAYS[obj[key]] || null };
+function inlinePathway(pr) {
+  if (!pr || !pr.care_pathway_key) return pr;
+  return { ...pr, clinical_pathway: CLINICAL_PATHWAYS[pr.care_pathway_key] || null };
 }
 
 app.get("/api/patients", (_req, res) => {
-  res.json(Object.values(PATIENTS).map((p) => ({
-    mrn: p.mrn,
-    name: p.name,
-    dob: p.dob,
-    latest_study: p.priors[p.priors.length - 1] || null,
-    insurance: p.insurance || null,
-  })));
+  res.json(Object.values(PATIENTS).map((p) => {
+    const latest = p.priors[p.priors.length - 1] || null;
+    const flags = (p.labs && p.labs.results ? p.labs.results.filter((r) => r.flag) : []).map((r) => r.test);
+    return {
+      mrn: p.mrn,
+      name: p.name,
+      dob: p.dob,
+      sex: p.sex,
+      latest_study: latest ? { date: latest.date, modality: latest.modality, body_part: latest.body_part, finding: latest.finding, reader: latest.reader } : null,
+      pathway_key: latest ? latest.care_pathway_key : null,
+      lab_flags: flags,
+    };
+  }));
 });
 
 app.get("/api/patient/:mrn", (req, res) => {
@@ -388,28 +408,34 @@ app.get("/api/patient/:mrn", (req, res) => {
   });
 });
 
-app.get("/api/employers", (_req, res) => {
-  res.json(Object.keys(WORKER_COHORTS).map((k) => ({
+app.get("/api/patient/:mrn/labs", (req, res) => {
+  const p = PATIENTS[req.params.mrn];
+  if (!p || !p.labs) return res.status(404).json({ error: "no labs on file" });
+  res.json({ mrn: p.mrn, name: p.name, ...p.labs });
+});
+
+app.get("/api/patient/:mrn/contrast-safety", (req, res) => {
+  const r = runTool("check_contrast_safety", { mrn: req.params.mrn });
+  res.json(r);
+});
+
+app.get("/api/clinics", (_req, res) => {
+  res.json(Object.keys(CLINICS).map((k) => ({
     key: k,
-    employer: WORKER_COHORTS[k].employer,
-    total_screened: WORKER_COHORTS[k].total_screened,
-    flagged_followup: WORKER_COHORTS[k].flagged_followup,
+    clinic: CLINICS[k].clinic,
+    total_studies: CLINICS[k].total_studies,
+    flagged_for_review: CLINICS[k].flagged_for_review,
   })));
 });
 
-app.get("/api/employer/:key", (req, res) => {
-  const e = WORKER_COHORTS[req.params.key];
-  if (!e) return res.status(404).json({ error: "employer not found" });
-  res.json({
-    ...e,
-    flagged_workers: e.flagged_workers.map((w) => inlinePathway(w)),
-  });
+app.get("/api/clinic/:key", (req, res) => {
+  const c = CLINICS[req.params.key];
+  if (!c) return res.status(404).json({ error: "clinic not found" });
+  res.json(c);
 });
 
 app.get("/api/pathways", (_req, res) => {
-  res.json(
-    Object.entries(CARE_PATHWAYS).map(([k, v]) => ({ key: k, ...v }))
-  );
+  res.json(Object.entries(CLINICAL_PATHWAYS).map(([k, v]) => ({ key: k, ...v })));
 });
 
 app.get("/api/scan-preps", (_req, res) => res.json(SCAN_PREPS));

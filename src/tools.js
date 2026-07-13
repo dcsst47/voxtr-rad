@@ -1,30 +1,36 @@
-// Tool definitions + handlers for the Boom Health demo.
+// Tool definitions + handlers for Voxtr Rad.
 //
 // Hybrid model:
-//   Demos 1 & 2 (patient prep + worker directions) — free-form Claude, no tool needed
-//     but get_appointment_details and get_scan_prep exist if Claude wants to ground the reply.
-//   Demos 3 & 4 (doctor priors + HR dashboard) — TOOL-BACKED so the numbers and the
-//     insurance-mandated care cascade are consistent and memorable.
+//   Free-form Claude for scan-prep and appointment questions (still callable via tools).
+//   TOOL-BACKED for clinician-facing scenarios: priors, labs, contrast safety, clinic ops.
 //
-// The care cascade is the money shot: every finding pulls a documented, insurance-required
-// downstream pathway. That is what the AI surfaces to the doctor and to HR — not "here's the
-// finding", but "here's the finding AND the next 12 months of billable, mandated care."
+// The critical demo behaviours these tools support:
+//   1. Doctor asks for priors → get_patient_priors returns imaging + LABS + clinical pathway
+//   2. Doctor orders contrast → check_contrast_safety runs, returns block/OK + alternatives
+//   3. Cross-domain flag → get_patient_priors returns lab-correlated pathway (e.g. TB workup)
+//   4. Clinic manager asks throughput → get_clinic_dashboard returns ops-only metrics (no pricing)
 
-const { SCAN_PREPS, CARE_PATHWAYS, PATIENTS, WORKER_COHORTS, APPOINTMENTS } = require("./demoData");
+const {
+  SCAN_PREPS,
+  CLINICAL_PATHWAYS,
+  PATIENTS,
+  CLINICS,
+  APPOINTMENTS,
+} = require("./demoData");
 
 // ─── Tool schemas exposed to Claude ───
 const TOOLS = [
   {
     name: "get_scan_prep",
     description:
-      "Look up patient prep for a specific scan type. Call when a patient asks how to prepare for a scan or what to bring. Returns fasting rules, clothing, bladder requirements, and duration.",
+      "Look up patient prep for a specific scan type. Call when a patient asks how to prepare or what to bring. Returns fasting rules, clothing, bladder requirements, duration.",
     input_schema: {
       type: "object",
       properties: {
         scan_type: {
           type: "string",
           description:
-            "Scan identifier. Valid: ultrasound_lower_abdomen, ultrasound_upper_abdomen, visa_medical_chest_xray, mri_knee, ct_contrast.",
+            "Scan identifier. Valid: ultrasound_lower_abdomen, ultrasound_upper_abdomen, visa_medical_chest_xray, mri_knee, mri_lumbar, mri_brain, ct_chest_contrast, ct_chest_no_contrast, mammogram_screening, dexa_scan.",
         },
       },
       required: ["scan_type"],
@@ -33,14 +39,11 @@ const TOOLS = [
   {
     name: "get_appointment_details",
     description:
-      "Look up an appointment: centre, address, time, documents to bring, fasting, transport. Call whenever a worker or patient asks where to go or what to bring. Demo keys: 'demo_visa_medical' (Transguard worker) or 'demo_ultrasound' (pregnant patient).",
+      "Look up an appointment: centre, address, time, documents to bring, fasting, transport. Call whenever a worker or patient asks where to go or what to bring. Demo keys: 'demo_visa_medical' or 'demo_ultrasound'.",
     input_schema: {
       type: "object",
       properties: {
-        appointment_key: {
-          type: "string",
-          description: "One of: demo_visa_medical, demo_ultrasound",
-        },
+        appointment_key: { type: "string", description: "One of: demo_visa_medical, demo_ultrasound" },
       },
       required: ["appointment_key"],
     },
@@ -48,7 +51,7 @@ const TOOLS = [
   {
     name: "get_patient_priors",
     description:
-      "Look up a patient's prior imaging, notes, and medications by MRN. Also returns — critically — the INSURANCE-MANDATED CARE PATHWAY that each finding triggers: mandated follow-ups, cadence, and price per step. Use this whenever a clinician asks for priors, history, or 'what happens next'. Demo MRNs: 84421 (Ahmed Al Blooshi — right knee history) and 77208 (Fatima Al Hosani — obstetric).",
+      "Look up a patient's prior imaging, notes, medications, AND recent laboratory results — plus the CLINICAL PATHWAY that each finding triggers. Use whenever a clinician asks for priors, history, labs, or 'what's next' on a patient. Demo MRNs: 84421 (Ahmed Al Blooshi — MSK), 77208 (Fatima Al Hosani — OB), 10241 (Rafiq Khan — visa medical), 10298 (Divya Menon — fatty liver), 10342 (Mohammed Al Shamsi — CONTRAST CONTRAINDICATION), 10391 (Yousef Nasser — spine), 10501 (Hassan Al Nuaimi — TB workup), 10488 (Ines Da Silva — DEXA).",
     input_schema: {
       type: "object",
       properties: {
@@ -63,28 +66,52 @@ const TOOLS = [
     },
   },
   {
-    name: "get_employer_dashboard",
+    name: "get_patient_labs",
     description:
-      "Return workforce-health metrics for an employer cohort: total screened, cleared, pending, flagged workers, and downstream revenue forecast from insurance-mandated follow-ups. Call whenever an employer HR contact asks about their workers' medicals. Demo employer: 'transguard'.",
+      "Return a patient's most recent laboratory panel with reference ranges and out-of-range flags. Use when a clinician asks specifically for labs, or before ordering contrast (creatinine check), or when correlating lab values with an imaging finding.",
     input_schema: {
       type: "object",
       properties: {
-        employer_key: { type: "string", description: "Employer key. Demo: 'transguard'." },
+        mrn: { type: "string", description: "Medical record number." },
       },
-      required: ["employer_key"],
+      required: ["mrn"],
     },
   },
   {
-    name: "get_care_pathway",
+    name: "check_contrast_safety",
     description:
-      "Look up the insurance-mandated follow-up cascade for a specific finding — what the payer requires, which follow-up steps are pre-authorised, expected pricing per step, and the total pathway revenue. Call this when a doctor or HR contact asks 'what's next' after a finding, or when the user wants to see the downstream revenue implications of a flag.",
+      "Review a patient's most recent renal labs (creatinine, eGFR) and medication list before iodinated contrast is administered. Returns a decision object: {block: bool, reason, alternatives, also}. Call this WHENEVER contrast is being ordered, mentioned, or discussed for a specific patient. This is the safety gate before an infusion — surface any block prominently to the ordering clinician.",
+    input_schema: {
+      type: "object",
+      properties: {
+        mrn: { type: "string", description: "Medical record number." },
+      },
+      required: ["mrn"],
+    },
+  },
+  {
+    name: "get_clinic_dashboard",
+    description:
+      "Return clinic throughput and workflow metrics: total studies, cleared vs flagged, first-pass AI agreement, TAT, modality mix, priority review queue. No pricing — clinical-ops only. Use when a clinic manager or coordinator asks about throughput, quality metrics, or the review queue.",
+    input_schema: {
+      type: "object",
+      properties: {
+        clinic_key: { type: "string", description: "Clinic key. Demo: 'main_clinic'." },
+      },
+      required: ["clinic_key"],
+    },
+  },
+  {
+    name: "get_clinical_pathway",
+    description:
+      "Look up the clinical follow-up pathway for a specific finding — what happens next clinically. No pricing. Use when a doctor or coordinator asks 'what's next' after a finding.",
     input_schema: {
       type: "object",
       properties: {
         pathway_key: {
           type: "string",
           description:
-            "Pathway identifier. Valid: medial_meniscal_tear_conservative, degenerative_medial_compartment_early_oa, first_trimester_obstetric_normal, tb_screening_flagged, elevated_random_glucose_visa.",
+            "Pathway identifier. Valid: medial_meniscal_tear_conservative, first_trimester_obstetric_normal, visa_medical_cleared, tb_workup_flagged, fatty_liver_metabolic, ct_contrast_contraindicated, lumbar_disc_bulge, dexa_osteoporosis.",
         },
       },
       required: ["pathway_key"],
@@ -113,36 +140,106 @@ function handleGetPatientPriors({ mrn, body_part }) {
     const needle = body_part.toLowerCase();
     priors = priors.filter((x) => (x.body_part || "").toLowerCase().includes(needle));
   }
-  // Inline each prior's care pathway so Claude gets everything in one shot.
   const priorsWithPathway = priors.map((pr) => ({
     ...pr,
-    insurance_mandated_pathway: pr.care_pathway_key ? CARE_PATHWAYS[pr.care_pathway_key] : null,
+    clinical_pathway: pr.care_pathway_key ? CLINICAL_PATHWAYS[pr.care_pathway_key] : null,
   }));
   return {
     mrn: p.mrn,
     name: p.name,
     dob: p.dob,
+    sex: p.sex,
     priors: priorsWithPathway,
     notes: p.notes,
     medications: p.medications,
-    insurance: p.insurance,
+    labs: p.labs,
   };
 }
 
-function handleGetEmployerDashboard({ employer_key }) {
-  const e = WORKER_COHORTS[employer_key];
-  if (!e) return { error: `No cohort for "${employer_key}".` };
-  // Inline pathway details per flagged worker so a single tool call answers the whole question.
-  const workersWithPathway = e.flagged_workers.map((w) => ({
-    ...w,
-    insurance_mandated_pathway: w.care_pathway_key ? CARE_PATHWAYS[w.care_pathway_key] : null,
-  }));
-  return { ...e, flagged_workers: workersWithPathway };
+function handleGetPatientLabs({ mrn }) {
+  const p = PATIENTS[mrn];
+  if (!p) return { error: `No patient for MRN "${mrn}".` };
+  if (!p.labs) return { error: `No lab panel on file for MRN "${mrn}".` };
+  return {
+    mrn: p.mrn,
+    name: p.name,
+    panel_date: p.labs.panel_date,
+    results: p.labs.results,
+    flagged_results: p.labs.results.filter((r) => r.flag),
+  };
 }
 
-function handleGetCarePathway({ pathway_key }) {
-  const p = CARE_PATHWAYS[pathway_key];
-  if (!p) return { error: `Unknown pathway "${pathway_key}". Available: ${Object.keys(CARE_PATHWAYS).join(", ")}` };
+function handleCheckContrastSafety({ mrn }) {
+  const p = PATIENTS[mrn];
+  if (!p) return { error: `No patient for MRN "${mrn}".` };
+  const labs = p.labs && p.labs.results ? p.labs.results : [];
+  const cr = labs.find((r) => r.test.toLowerCase() === "creatinine");
+  const egfr = labs.find((r) => r.test.toLowerCase() === "egfr");
+  const onMetformin = (p.medications || []).some((m) => m.drug && m.drug.toLowerCase() === "metformin");
+
+  const egfrVal = egfr ? egfr.value : null;
+  const crVal = cr ? cr.value : null;
+  let block = false;
+  let reason = null;
+  let alternatives = [];
+  let also = [];
+
+  if (egfrVal !== null && egfrVal < 30) {
+    block = true;
+    reason = `eGFR ${egfrVal} mL/min/1.73m² (severe renal impairment) — iodinated contrast strongly contraindicated per KDIGO / ACR.`;
+    alternatives = [
+      "Non-contrast CT",
+      "MRI without gadolinium",
+      "Ultrasound if anatomically feasible",
+    ];
+  } else if (egfrVal !== null && egfrVal < 45) {
+    block = true;
+    reason = `eGFR ${egfrVal} mL/min/1.73m² (CKD 3b) — iodinated contrast contraindicated without nephro sign-off.`;
+    alternatives = [
+      "Non-contrast CT (recommended)",
+      "MRI with gadobutrol at reduced dose (macrocyclic, safer at this eGFR)",
+      "Pre-hydration protocol + N-acetylcysteine + nephrology clearance if contrast is required",
+    ];
+  } else if (crVal !== null && crVal > 1.5) {
+    block = true;
+    reason = `Creatinine ${crVal} mg/dL — order recent eGFR before proceeding.`;
+    alternatives = [
+      "Repeat renal panel to confirm eGFR",
+      "Non-contrast CT while awaiting result",
+    ];
+  } else {
+    block = false;
+    reason = `Renal function acceptable (Cr ${crVal ?? "?"} · eGFR ${egfrVal ?? "?"}). Contrast may be administered per standard protocol.`;
+  }
+  if (onMetformin && !block) {
+    also.push("Patient on metformin — hold at scan and for 48 hours after contrast; recheck creatinine before restart.");
+  }
+  if (onMetformin && block) {
+    also.push("Patient on metformin — if contrast is later administered, hold metformin at scan and 48h post-contrast.");
+  }
+
+  return {
+    mrn: p.mrn,
+    name: p.name,
+    creatinine: crVal,
+    egfr: egfrVal,
+    on_metformin: onMetformin,
+    block,
+    reason,
+    alternatives,
+    also,
+  };
+}
+
+function handleGetClinicDashboard({ clinic_key }) {
+  const c = CLINICS[clinic_key];
+  if (!c) return { error: `No clinic for "${clinic_key}".` };
+  return c;
+}
+
+function handleGetClinicalPathway({ pathway_key }) {
+  const p = CLINICAL_PATHWAYS[pathway_key];
+  if (!p) return { error: `Unknown pathway "${pathway_key}". Available: ${Object.keys(CLINICAL_PATHWAYS).join(", ")}` };
   return p;
 }
 
@@ -150,8 +247,10 @@ const HANDLERS = {
   get_scan_prep: handleGetScanPrep,
   get_appointment_details: handleGetAppointmentDetails,
   get_patient_priors: handleGetPatientPriors,
-  get_employer_dashboard: handleGetEmployerDashboard,
-  get_care_pathway: handleGetCarePathway,
+  get_patient_labs: handleGetPatientLabs,
+  check_contrast_safety: handleCheckContrastSafety,
+  get_clinic_dashboard: handleGetClinicDashboard,
+  get_clinical_pathway: handleGetClinicalPathway,
 };
 
 async function runTool(name, input) {
