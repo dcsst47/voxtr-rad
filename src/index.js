@@ -376,7 +376,7 @@ const {
   CLINICS,
   APPOINTMENTS,
 } = require("./demoData");
-const { runTool } = require("./tools");
+// runTool is already imported at the top of the file
 
 function inlinePathway(pr) {
   if (!pr || !pr.care_pathway_key) return pr;
