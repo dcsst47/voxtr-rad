@@ -414,8 +414,8 @@ app.get("/api/patient/:mrn/labs", (req, res) => {
   res.json({ mrn: p.mrn, name: p.name, ...p.labs });
 });
 
-app.get("/api/patient/:mrn/contrast-safety", (req, res) => {
-  const r = runTool("check_contrast_safety", { mrn: req.params.mrn });
+app.get("/api/patient/:mrn/contrast-safety", async (req, res) => {
+  const r = await runTool("check_contrast_safety", { mrn: req.params.mrn });
   res.json(r);
 });
 
