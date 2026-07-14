@@ -398,6 +398,51 @@
   .alert-card .patient { font-weight: 600; color: var(--text); }
   .alert-card .body { color: #dbe5f2; margin-top: 4px; line-height: 1.4; }
 
+  /* Inbox layout */
+  .inbox-grid { display: grid; grid-template-columns: 340px 1fr 380px; gap: 16px; height: calc(100vh - 200px); min-height: 620px; }
+  @media (max-width: 1200px) { .inbox-grid { grid-template-columns: 1fr; height: auto; } }
+  .inbox-list, .inbox-transcript, .inbox-chat { display: flex; flex-direction: column; min-height: 0; }
+  .inbox-scroll { flex: 1; overflow-y: auto; padding-right: 4px; }
+
+  .conv-item {
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: var(--card-2);
+    cursor: pointer;
+    margin-bottom: 8px;
+    transition: all 0.15s ease;
+  }
+  .conv-item:hover { border-color: var(--accent-dim); transform: translateX(2px); }
+  .conv-item.active { border-color: var(--accent); background: rgba(0, 217, 200, 0.08); }
+  .conv-item .top { display: flex; justify-content: space-between; align-items: center; }
+  .conv-item .sender { font-weight: 600; font-size: 13px; }
+  .conv-item .channel { font-size: 9px; padding: 2px 6px; border-radius: 4px; letter-spacing: 0.5px; font-weight: 700; }
+  .conv-item .channel.WhatsApp { background: rgba(34, 197, 94, 0.15); color: #86efac; }
+  .conv-item .channel.Web { background: rgba(96, 165, 250, 0.15); color: #93c5fd; }
+  .conv-item .preview { font-size: 12px; color: var(--dim); margin-top: 4px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  .conv-item .meta { font-size: 10px; color: var(--muted); margin-top: 4px; display: flex; justify-content: space-between; }
+
+  .msg { padding: 10px 12px; border-radius: 12px; margin-bottom: 8px; font-size: 13px; line-height: 1.4; max-width: 85%; }
+  .msg.user { background: var(--card-2); align-self: flex-end; margin-left: auto; border: 1px solid var(--border); }
+  .msg.assistant { background: rgba(0, 217, 200, 0.08); border: 1px solid rgba(0, 217, 200, 0.25); align-self: flex-start; }
+  .msg .who { font-size: 10px; color: var(--muted); font-weight: 700; letter-spacing: 0.5px; margin-bottom: 4px; text-transform: uppercase; }
+
+  .chat-input { display: flex; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+  .chat-input textarea {
+    flex: 1; resize: none; background: var(--card-2); border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px; color: var(--text); font-family: inherit; font-size: 13px;
+    outline: none; min-height: 44px; max-height: 120px;
+  }
+  .chat-input textarea:focus { border-color: var(--accent-dim); }
+  .chat-send {
+    background: var(--accent); color: #041418; border: none; padding: 0 16px;
+    border-radius: 8px; font-weight: 700; font-size: 12px; cursor: pointer; letter-spacing: 0.5px;
+  }
+  .chat-send:hover { background: var(--accent-dim); color: #fff; }
+  .chat-send:disabled { opacity: 0.5; cursor: not-allowed; }
+  .chat-hint { font-size: 10px; color: var(--muted); margin-top: 6px; letter-spacing: 0.3px; }
+
   /* Loading */
   .loading { padding: 60px; text-align: center; color: var(--muted); }
 
@@ -432,6 +477,7 @@
     <button data-role="physician">Physician</button>
     <button data-role="coordinator">Coordinator</button>
     <button data-role="ops">Clinic Ops</button>
+    <button data-role="inbox">Inbox</button>
   </nav>
   <div class="live"><span class="pulse"></span> LIVE · voice channel connected</div>
 </header>
@@ -1220,6 +1266,202 @@ async function renderClinicOps() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// INBOX — team-wide conversations + web chat with Voxtr
+// ─────────────────────────────────────────────────────────────
+const chatState = {
+  sessionId: (localStorage.getItem('voxtr_sid') || (() => {
+    const s = 'sess_' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('voxtr_sid', s);
+    return s;
+  })()),
+  messages: [],
+  selectedConvKey: null,
+  refreshTimer: null,
+};
+
+async function renderInbox() {
+  const main = $('#main');
+  main.innerHTML = '<div class="loading">Loading…</div>';
+
+  main.innerHTML = '';
+  main.appendChild(el('div', { class: 'section-head' },
+    el('div', {},
+      el('h1', {}, 'Team Inbox'),
+      el('p', {}, 'Every conversation Voxtr is holding across WhatsApp and the dashboard. Voice notes land here — nothing gets lost, anyone on the team can pick up.')
+    ),
+    el('div', { class: 'subtle' }, el('span', { class: 'pulse', style: 'display: inline-block; margin-right: 6px; vertical-align: middle;' }), ' live · auto-refreshing')
+  ));
+
+  const grid = el('div', { class: 'inbox-grid' });
+  main.appendChild(grid);
+
+  // Column 1: conversation list
+  const listCard = el('div', { class: 'card inbox-list' },
+    el('h3', {}, 'Conversations'),
+    el('div', { class: 'inbox-scroll', id: 'convList' },
+      el('div', { class: 'subtle', style: 'padding: 20px 0; text-align: center;' }, 'Loading conversations…')
+    )
+  );
+  grid.appendChild(listCard);
+
+  // Column 2: transcript viewer
+  const transcriptCard = el('div', { class: 'card inbox-transcript' },
+    el('h3', {}, 'Transcript'),
+    el('div', { class: 'inbox-scroll', id: 'transcript', style: 'display: flex; flex-direction: column;' },
+      el('div', { class: 'subtle', style: 'padding: 40px 0; text-align: center;' }, 'Select a conversation from the left to see the full transcript.')
+    )
+  );
+  grid.appendChild(transcriptCard);
+
+  // Column 3: web chat with Voxtr
+  const chatCard = el('div', { class: 'card inbox-chat' },
+    el('h3', {}, 'Chat with Voxtr (internal)'),
+    el('div', { class: 'subtle', style: 'font-size: 11px; margin-bottom: 8px;' },
+      'Use this to consult Voxtr from the workstation — checks priors, labs, safety, pathway. Text now, voice-record coming.'),
+    el('div', { class: 'inbox-scroll', id: 'chatBody', style: 'display: flex; flex-direction: column;' }),
+    el('div', { class: 'chat-input' },
+      el('textarea', {
+        id: 'chatInput',
+        placeholder: 'e.g. "priors on MRN 10342, thinking of ordering contrast"',
+        onkeydown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendChatMessage(); } },
+      }),
+      el('button', { class: 'chat-send', id: 'chatSend', onclick: sendChatMessage }, 'Send')
+    ),
+    el('div', { class: 'chat-hint' }, 'Enter to send · Shift+Enter for newline · session persists this browser')
+  );
+  grid.appendChild(chatCard);
+
+  // Restore chat messages if any
+  renderChatMessages();
+
+  // Load conversations
+  await refreshConversations();
+
+  // Auto-refresh every 12s while on this tab
+  if (chatState.refreshTimer) clearInterval(chatState.refreshTimer);
+  chatState.refreshTimer = setInterval(() => {
+    if (state.role === 'inbox') refreshConversations().catch(() => {});
+    else { clearInterval(chatState.refreshTimer); chatState.refreshTimer = null; }
+  }, 12000);
+}
+
+async function refreshConversations() {
+  const list = await api('/api/conversations');
+  const listEl = $('#convList');
+  if (!listEl) return;
+  listEl.innerHTML = '';
+  if (!list.length) {
+    listEl.appendChild(el('div', { class: 'subtle', style: 'padding: 20px 0; text-align: center;' },
+      'No conversations yet. Message the Voxtr WhatsApp number or use the chat panel on the right.'));
+    return;
+  }
+  list.forEach((c) => {
+    const isMine = chatState.selectedConvKey === c.key;
+    const item = el('div', {
+      class: 'conv-item' + (isMine ? ' active' : ''),
+      onclick: () => { chatState.selectedConvKey = c.key; refreshConversations(); loadTranscript(c.key); },
+    },
+      el('div', { class: 'top' },
+        el('div', { class: 'sender' }, c.sender),
+        el('span', { class: 'channel ' + c.channel }, c.channel)
+      ),
+      el('div', { class: 'preview' }, c.last_message || '(empty)'),
+      el('div', { class: 'meta' },
+        el('span', {}, `${c.message_count} msg${c.message_count > 1 ? 's' : ''} · ${c.last_role === 'user' ? 'awaiting reply' : 'replied'}`),
+        el('span', {}, timeAgo(c.last_ts))
+      )
+    );
+    listEl.appendChild(item);
+  });
+}
+
+function timeAgo(ts) {
+  if (!ts) return '';
+  const secs = Math.floor((Date.now() - ts) / 1000);
+  if (secs < 60) return `${secs}s`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h`;
+  return `${Math.floor(hrs / 24)}d`;
+}
+
+async function loadTranscript(key) {
+  const t = await api('/api/conversation/' + encodeURIComponent(key));
+  const box = $('#transcript');
+  if (!box) return;
+  box.innerHTML = '';
+  const header = el('div', { style: 'padding-bottom: 10px; margin-bottom: 10px; border-bottom: 1px solid var(--border); font-weight: 600;' },
+    `${t.sender}  ·  ${t.messages.length} messages`);
+  box.appendChild(header);
+  t.messages.forEach((m) => {
+    box.appendChild(el('div', { class: 'msg ' + m.role },
+      el('div', { class: 'who' }, m.role === 'user' ? 'Patient / User' : 'Voxtr AI'),
+      el('div', {}, (m.text || '') + (m.hasMedia ? ' 📎' : ''))
+    ));
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderChatMessages() {
+  const box = $('#chatBody');
+  if (!box) return;
+  box.innerHTML = '';
+  if (!chatState.messages.length) {
+    box.appendChild(el('div', { class: 'subtle', style: 'padding: 20px 0; text-align: center;' },
+      'Ask Voxtr anything — try "priors on 10342" or "contrast safety on Mohammed Al Shamsi"'));
+    return;
+  }
+  chatState.messages.forEach((m) => {
+    box.appendChild(el('div', { class: 'msg ' + m.role },
+      el('div', { class: 'who' }, m.role === 'user' ? 'You' : 'Voxtr AI'),
+      el('div', {}, m.text)
+    ));
+  });
+  box.scrollTop = box.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = $('#chatInput');
+  const btn = $('#chatSend');
+  if (!input) return;
+  const text = input.value.trim();
+  if (!text) return;
+  input.value = '';
+  input.disabled = true;
+  btn.disabled = true;
+  btn.textContent = 'Thinking…';
+
+  chatState.messages.push({ role: 'user', text });
+  renderChatMessages();
+
+  try {
+    const r = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: text, session_id: chatState.sessionId }),
+    });
+    const j = await r.json();
+    if (j.reply) {
+      chatState.messages.push({ role: 'assistant', text: j.reply });
+    } else {
+      chatState.messages.push({ role: 'assistant', text: '(no reply — ' + (j.error || 'unknown error') + ')' });
+    }
+  } catch (err) {
+    chatState.messages.push({ role: 'assistant', text: '(request failed: ' + err.message + ')' });
+  }
+
+  renderChatMessages();
+  input.disabled = false;
+  btn.disabled = false;
+  btn.textContent = 'Send';
+  input.focus();
+
+  // Refresh conversations so the new web chat shows up in the inbox
+  refreshConversations().catch(() => {});
+}
+
+// ─────────────────────────────────────────────────────────────
 function stat(label, value, sub) {
   return el('div', { class: 'stat' },
     el('div', { class: 'stat-label' }, label),
@@ -1234,6 +1476,7 @@ const views = {
   physician: renderPhysician,
   coordinator: renderCoordinator,
   ops: renderClinicOps,
+  inbox: renderInbox,
 };
 
 function setRole(role) {

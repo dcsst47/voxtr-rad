@@ -219,12 +219,12 @@ STYLE:
 
 Today's date: ${new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
 
-// ─── Main AI turn ───
-async function runAiTurn(from, userText, mediaBlocks, isVoice, detectedLanguage) {
+// ─── Core agent — channel-agnostic. Returns the reply text; caller handles delivery. ───
+async function runAgent(from, userText, mediaBlocks, isVoice, detectedLanguage, channelLabel = "WhatsApp") {
   pushTurn(from, "user", userText, mediaBlocks);
 
   const messages = getHistoryForClaude(from);
-  const dynamic = `Message channel: WhatsApp voice note = ${isVoice}. Detected user language: ${detectedLanguage}. Reply naturally in that language; the reply will be spoken back over voice as well as sent as text.`;
+  const dynamic = `Message channel: ${channelLabel}${isVoice ? " voice note" : ""}. Detected user language: ${detectedLanguage}. Reply naturally in that language.${channelLabel === "WhatsApp" && isVoice ? " The reply will be spoken back over voice as well as sent as text." : ""}`;
 
   const system = [
     { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
@@ -253,7 +253,6 @@ async function runAiTurn(from, userText, mediaBlocks, isVoice, detectedLanguage)
         break;
       }
 
-      // Run every tool call in this round.
       messages.push({ role: "assistant", content: resp.content });
       const toolResults = [];
       for (const t of toolUses) {
@@ -275,6 +274,12 @@ async function runAiTurn(from, userText, mediaBlocks, isVoice, detectedLanguage)
   }
 
   pushTurn(from, "assistant", replyText);
+  return { replyText, language: detectedLanguage };
+}
+
+// ─── WhatsApp delivery wrapper — the webhook uses this ───
+async function runAiTurn(from, userText, mediaBlocks, isVoice, detectedLanguage) {
+  const { replyText } = await runAgent(from, userText, mediaBlocks, isVoice, detectedLanguage, "WhatsApp");
   await sendReply(from, replyText, detectedLanguage, isVoice);
 }
 
@@ -473,6 +478,71 @@ app.get("/api/pathways", (_req, res) => {
 
 app.get("/api/scan-preps", (_req, res) => res.json(SCAN_PREPS));
 app.get("/api/appointments", (_req, res) => res.json(APPOINTMENTS));
+
+// ─── Team inbox: recent conversations across WhatsApp + web chat ───
+// Returns lightly-redacted list of every ongoing conversation the agent is holding.
+function redactSender(from) {
+  const raw = (from || "").replace(/^whatsapp:/, "").replace(/^web:/, "web · ");
+  // Redact middle digits of a phone number: +971 50 60 25877 → +971 50 XX XX 877
+  const m = raw.match(/^\+(\d{1,4})(\d+)(\d{3})$/);
+  if (m) return `+${m[1]} · ···· ${m[3]}`;
+  return raw;
+}
+
+app.get("/api/conversations", (_req, res) => {
+  const arr = [];
+  for (const [from, msgs] of conversations.entries()) {
+    if (!msgs || msgs.length === 0) continue;
+    const last = msgs[msgs.length - 1];
+    const first = msgs[0];
+    const channel = from.startsWith("web:") ? "Web" : "WhatsApp";
+    arr.push({
+      key: from,
+      sender: redactSender(from),
+      channel,
+      last_message: (last.text || "").slice(0, 160),
+      last_role: last.role,
+      last_ts: last.ts,
+      first_ts: first.ts,
+      message_count: msgs.length,
+    });
+  }
+  arr.sort((a, b) => b.last_ts - a.last_ts);
+  res.json(arr.slice(0, 40));
+});
+
+app.get("/api/conversation/:key", (req, res) => {
+  const key = decodeURIComponent(req.params.key);
+  const msgs = conversations.get(key) || [];
+  res.json({
+    key,
+    sender: redactSender(key),
+    messages: msgs.map((m) => ({
+      role: m.role,
+      text: m.text,
+      ts: m.ts,
+      hasMedia: !!(m.media && m.media.length),
+    })),
+  });
+});
+
+// ─── Web chat: internal team members interact with Voxtr from the dashboard ───
+// Uses the same runAgent as WhatsApp — replies flow into the same team inbox.
+app.post("/api/chat", async (req, res) => {
+  const { message, session_id, language } = req.body || {};
+  if (!message || typeof message !== "string" || !message.trim()) {
+    return res.status(400).json({ error: "message required" });
+  }
+  const sid = (session_id || "anon").replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 40) || "anon";
+  const key = `web:${sid}`;
+  try {
+    const { replyText } = await runAgent(key, message.trim(), [], false, language || "en", "Web dashboard");
+    res.json({ reply: replyText, key });
+  } catch (err) {
+    console.error("Web chat error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get("/health", (_req, res) => {
   res.json({
